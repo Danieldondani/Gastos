@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuentas del mes</title>
+<meta name="description" content="Ingresos y gastos mensuales por categoría.">
+<meta name="theme-color" content="#f4f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101714" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cuentas">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Ingresos y gastos</div>
+      <h1>Cuentas del mes</h1>
+    </div>
+    <div class="month-nav">
+      <button class="icon-btn" id="prev" aria-label="Mes anterior">‹</button>
+      <div class="label" id="monthLabel" aria-live="polite"></div>
+      <button class="icon-btn" id="next" aria-label="Mes siguiente">›</button>
+    </div>
+  </header>
+
+  <section class="import" id="importBox" hidden>
+    <div>
+      <strong>Tu historial de 2026 está listo</strong>
+      <p id="importText">De enero a noviembre: 457 movimientos de tus notas, ya con categoría. Se añaden a este dispositivo con un clic.</p>
+    </div>
+    <button class="primary" type="button" id="importBtn">Importar historial</button>
+  </section>
+
+  <section class="totals" aria-label="Resumen del mes">
+    <div class="total pos"><span class="eyebrow">Total positivo</span><span class="value" id="tPos">0,00 €</span><span class="hint">Suma de ingresos</span></div>
+    <div class="total neg"><span class="eyebrow">Total negativo</span><span class="value" id="tNeg">0,00 €</span><span class="hint">Suma de gastos</span></div>
+    <div class="total sum pos" id="tSumBox"><span class="eyebrow">Total del mes</span><span class="value" id="tSum">0,00 €</span><span class="hint" id="tSumHint">Ingresos menos gastos</span></div>
+  </section>
+
+  <div class="cols">
+    <section class="panel" aria-labelledby="addTitle">
+      <h2 id="addTitle">Añadir movimiento</h2>
+      <form id="form" autocomplete="off">
+        <div class="seg" role="group" aria-label="Tipo de movimiento">
+          <button type="button" class="gasto" id="typeGasto" aria-pressed="true">Gasto</button>
+          <button type="button" class="ingreso" id="typeIngreso" aria-pressed="false">Ingreso</button>
+        </div>
+        <div class="row2">
+          <label for="amount">Importe (€)
+            <input id="amount" type="text" inputmode="decimal" placeholder="0,00" required>
+          </label>
+          <label for="date">Fecha
+            <input id="date" type="date" required>
+          </label>
+        </div>
+        <label for="cat">Categoría
+          <input id="cat" type="text" list="catList" placeholder="Gasolina, Cenas, Uni…" required>
+          <datalist id="catList"></datalist>
+        </label>
+        <div class="chips" id="chips" aria-label="Categorías rápidas"></div>
+        <label for="note">Nota (opcional)
+          <input id="note" type="text" placeholder="Ej. Repsol, cena con Ana…">
+        </label>
+        <div class="msg" id="msg" role="status"></div>
+        <div class="actions">
+          <button class="primary" type="submit" id="saveBtn">Guardar</button>
+          <button class="ghost" type="button" id="cancelEdit" hidden>Cancelar</button>
+        </div>
+      </form>
+      <div class="status" id="status"></div>
+    </section>
+
+    <div class="tables">
+      <section class="panel" aria-labelledby="gTitle">
+        <h2 id="gTitle">Gastos por categoría</h2>
+        <div class="scroll" id="gTable"></div>
+      </section>
+      <section class="panel" aria-labelledby="iTitle">
+        <h2 id="iTitle">Ingresos por categoría</h2>
+        <div class="scroll" id="iTable"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="movTitle">
+    <h2 id="movTitle">Movimientos del mes</h2>
+    <div class="scroll" id="movTable"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="histTitle">
+    <h2 id="histTitle">Meses</h2>
+    <div class="scroll" id="histTable"></div>
+  </section>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
