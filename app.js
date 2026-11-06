@@ -5,7 +5,7 @@
     gasto: ["Gasolina", "Cenas", "Uni", "Comida", "Ocio", "Alquiler", "Transporte", "Otros"],
     ingreso: ["Nómina", "Beca", "Familia", "Otros ingresos"]
   };
-  var eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+  var eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", useGrouping: "always" });
   var $ = function (id) { return document.getElementById(id); };
 
   var state = { items: [], month: monthKey(new Date()), type: "gasto", mode: "loading" };
@@ -16,6 +16,8 @@
   function todayStr() { var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function esc(s) { var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; }
   function money(n) { return eur.format(n); }
+  function mshort(n) { return eur.format(n).replace(/\s?€/, ""); }
+  function shortMonth(key) { var p = key.split("-"); return MESES[+p[1] - 1].slice(0, 3) + " \u2019" + p[0].slice(2); }
   function shiftMonth(key, delta) {
     var p = key.split("-"); var d = new Date(+p[0], +p[1] - 1 + delta, 1); return monthKey(d);
   }
@@ -23,6 +25,11 @@
   function fmtDate(s) { var p = s.split("-"); return p[2] + "/" + p[1]; }
 
   /* ---------- almacenamiento ---------- */
+  var META_KEY = "cuentas-meta-v1";
+  function metaGet() { try { return JSON.parse(localStorage.getItem(META_KEY) || "{}") || {}; } catch (e) { return {}; } }
+  function metaSet(m) { try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (e) {} }
+  function bump() { var m = metaGet(); m.rev = (m.rev || 0) + 1; metaSet(m); }
+
   function localStore() {
     var KEY = "cuentas-del-mes-v1";
     var listeners = [];
@@ -30,17 +37,20 @@
     function write(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {} }
     var mem = read();
     function emit() { listeners.forEach(function (f) { f(mem.slice()); }); }
+    function changed() { write(mem); bump(); emit(); }
     return {
       mode: "local",
       subscribe: function (f) { listeners.push(f); f(mem.slice()); },
+      add: function (item) { mem = mem.filter(function (x) { return x.id !== item.id; }); mem.push(item); changed(); return Promise.resolve(); },
       addMany: function (list) {
         var ids = {}; list.forEach(function (x) { ids[x.id] = 1; });
-        mem = mem.filter(function (x) { return !ids[x.id]; }).concat(list); write(mem); emit(); return Promise.resolve();
+        mem = mem.filter(function (x) { return !ids[x.id]; }).concat(list); changed(); return Promise.resolve();
       },
-      add: function (item) { mem = mem.filter(function (x) { return x.id !== item.id; }); mem.push(item); write(mem); emit(); return Promise.resolve(); },
-      remove: function (id) { mem = mem.filter(function (x) { return x.id !== id; }); write(mem); emit(); return Promise.resolve(); }
+      replaceAll: function (list) { mem = list.slice(); changed(); return Promise.resolve(); },
+      remove: function (id) { mem = mem.filter(function (x) { return x.id !== id; }); changed(); return Promise.resolve(); }
     };
   }
+
   function init() {
     store = localStore();
     state.mode = "local";
@@ -114,17 +124,18 @@
       var pi = sum(its.filter(function (x) { return x.type === "ingreso"; }));
       var pg = sum(its.filter(function (x) { return x.type === "gasto"; }));
       ti_ += pi; tg_ += pg;
-      rows.push("<tr class='mrow" + (k === state.month ? " cur" : "") + "' data-month='" + k + "'><td style='text-transform:capitalize'>" + monthName(k) + "</td><td class='r num amt-pos'>" + money(pi) +
-        "</td><td class='r num amt-neg'>" + money(pg) + "</td><td class='r num " + (pi - pg < 0 ? "amt-neg" : "amt-pos") + "'>" + money(pi - pg) + "</td></tr>");
+      rows.push("<tr class='mrow" + (k === state.month ? " cur" : "") + "' data-month='" + k + "'><td style='text-transform:capitalize;white-space:nowrap'>" + shortMonth(k) + "</td><td class='r num amt-pos'>" + mshort(pi) +
+        "</td><td class='r num amt-neg'>" + mshort(pg) + "</td><td class='r num " + (pi - pg < 0 ? "amt-neg" : "amt-pos") + "'>" + mshort(pi - pg) + "</td></tr>");
     }
     $("histTable").innerHTML = rows.length
-      ? "<table><thead><tr><th>Mes</th><th class='r'>Positivo</th><th class='r'>Negativo</th><th class='r'>Total</th></tr></thead><tbody>" + rows.join("") +
-        "</tbody><tfoot><tr><td>Total acumulado</td><td class='r num amt-pos'>" + money(ti_) + "</td><td class='r num amt-neg'>" + money(tg_) + "</td><td class='r num " + (ti_ - tg_ < 0 ? "amt-neg" : "amt-pos") + "'>" + money(ti_ - tg_) + "</td></tr></tfoot></table>"
+      ? "<table><thead><tr><th>Mes</th><th class='r'>Positivo €</th><th class='r'>Negativo €</th><th class='r'>Total €</th></tr></thead><tbody>" + rows.join("") +
+        "</tbody><tfoot><tr><td>Total</td><td class='r num amt-pos'>" + mshort(ti_) + "</td><td class='r num amt-neg'>" + mshort(tg_) + "</td><td class='r num " + (ti_ - tg_ < 0 ? "amt-neg" : "amt-pos") + "'>" + mshort(ti_ - tg_) + "</td></tr></tfoot></table>"
       : '<div class="empty">Cuando añadas movimientos, aquí aparecerán todos los meses.</div>';
 
     renderCats();
     renderStatus();
     renderImport();
+    renderBackup();
   }
 
   var importing = false, importDone = false;
@@ -164,8 +175,11 @@
     $("chips").innerHTML = list.slice(0, 8).map(function (c) { return '<button type="button" class="chip" data-cat="' + esc(c) + '">' + esc(c) + "</button>"; }).join("");
   }
 
+  function pendingChanges() { var m = metaGet(); return (m.rev || 0) - (m.backupRev || 0); }
   function renderStatus() {
-    $("status").textContent = "Tus datos se guardan solo en este dispositivo.";
+    var t = "Tus datos se guardan solo en este dispositivo.";
+    if (state.items.length && pendingChanges() > 0) t += " Tienes cambios sin copia de seguridad.";
+    $("status").textContent = t;
   }
 
   /* ---------- eventos ---------- */
@@ -245,6 +259,91 @@
       render();
     }).catch(function () { msg.textContent = "No se pudo guardar. Inténtalo de nuevo."; });
   });
+
+  /* ---------- copia de seguridad ---------- */
+  function fmtStamp(ts) {
+    var d = new Date(ts);
+    return pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function renderBackup() {
+    var m = metaGet(), pend = pendingChanges(), t, warn = false;
+    if (!state.items.length) t = "Todavía no hay datos que guardar. Si vienes de otro móvil, usa Restaurar copia.";
+    else if (!m.backupAt) { t = "Aún no has hecho ninguna copia. Si borras la app, perderás tus datos."; warn = true; }
+    else if (pend > 0) { t = "Última copia: " + fmtStamp(m.backupAt) + ". Has hecho " + pend + (pend === 1 ? " cambio" : " cambios") + " desde entonces."; warn = true; }
+    else t = "Última copia: " + fmtStamp(m.backupAt) + ". Todo está al día.";
+    var el = $("backupInfo"); el.textContent = t; el.classList.toggle("warn", warn);
+  }
+  function markBackup(ts) {
+    var m = metaGet(); m.backupRev = m.rev || 0; m.backupAt = ts || Date.now(); metaSet(m);
+  }
+  async function exportBackup() {
+    var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg ok";
+    var name = "cuentas-" + todayStr() + ".json";
+    var json = JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items }, null, 1);
+    var done = false, file = null;
+    try { file = new File([json], name, { type: "application/json" }); } catch (e) { file = null; }
+    try {
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Copia de Cuentas del mes" });
+        done = true;
+      }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    if (!done) {
+      var url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      var a = document.createElement("a"); a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    }
+    markBackup();
+    msg.textContent = "Copia lista. Guárdala en Archivos o en iCloud Drive.";
+    renderBackup(); renderStatus();
+  }
+  var pendingRestore = null;
+  function cleanItem(x) {
+    if (!x || !x.id || (x.type !== "gasto" && x.type !== "ingreso")) return null;
+    if (typeof x.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(x.date)) return null;
+    var amt = Number(x.amount); if (!(amt >= 0) || !x.cat) return null;
+    var o = { id: String(x.id), type: x.type, amount: Math.round(amt * 100) / 100, cat: String(x.cat), note: x.note ? String(x.note) : "", date: x.date, ts: Number(x.ts) || Date.now() };
+    if (x.imported) o.imported = true;
+    return o;
+  }
+  $("exportBtn").addEventListener("click", exportBackup);
+  $("restoreInput").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    var msg = $("backupMsg"); msg.className = "msg"; msg.textContent = "";
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var data = JSON.parse(r.result);
+        var list = (Array.isArray(data) ? data : data.items).map(cleanItem).filter(Boolean);
+        if (!list.length) throw new Error("vacio");
+        pendingRestore = { list: list, at: data.exportedAt ? Date.parse(data.exportedAt) : null };
+        var dates = list.map(function (x) { return x.date; }).sort();
+        $("restoreText").textContent = "El archivo tiene " + list.length + " movimientos (de " + monthName(dates[0].slice(0, 7)) + " a " + monthName(dates[dates.length - 1].slice(0, 7)) + "). Combinar los añade a lo que ya tienes. Reemplazar todo borra lo actual y deja solo el archivo.";
+        $("restoreChoice").hidden = false;
+      } catch (err) {
+        pendingRestore = null; $("restoreChoice").hidden = true;
+        msg.textContent = "Ese archivo no es una copia válida de Cuentas del mes.";
+      }
+    };
+    r.onerror = function () { msg.textContent = "No se pudo leer el archivo."; };
+    r.readAsText(f);
+    e.target.value = "";
+  });
+  async function doRestore(replace) {
+    if (!pendingRestore || !store) return;
+    var p = pendingRestore; pendingRestore = null; $("restoreChoice").hidden = true;
+    if (replace) await store.replaceAll(p.list); else await store.addMany(p.list);
+    importDone = true;
+    if (replace) markBackup(p.at);
+    var latest = p.list.map(function (x) { return x.date; }).sort().pop();
+    state.month = latest.slice(0, 7);
+    var msg = $("backupMsg"); msg.className = "msg ok"; msg.textContent = "Copia restaurada: " + p.list.length + " movimientos.";
+    render();
+  }
+  $("restoreMerge").addEventListener("click", function () { doRestore(false); });
+  $("restoreReplace").addEventListener("click", function () { doRestore(true); });
+  $("restoreCancel").addEventListener("click", function () { pendingRestore = null; $("restoreChoice").hidden = true; });
 
   $("date").value = todayStr();
   setType("gasto");
