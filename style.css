@@ -162,3 +162,30 @@ th { white-space: nowrap; }
   .wrap { gap: 16px; }
   body { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
 }
+
+/* ---- categorías editables ---- */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.fieldhead { display: flex; align-items: center; justify-content: space-between; }
+.fieldhead label { font-size: 13px; font-weight: 500; color: var(--muted); }
+.menu-btn { width: 36px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 0; }
+.menu-btn:hover { border-color: var(--accent); }
+.sheet { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .72); display: flex; align-items: flex-end; justify-content: center; }
+.sheet-card { background: var(--surface); border: 1px solid var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; width: 100%; max-width: 520px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 600px) { .sheet { align-items: center; } .sheet-card { border-radius: 16px; border-bottom: 1px solid var(--line); } }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-head .ghost { padding: 8px 16px; }
+.catadd { display: flex; flex-direction: row; gap: 8px; }
+.catadd input { flex: 1; }
+.catlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.catlist li { display: flex; align-items: center; gap: 6px; padding: 6px 2px; border-bottom: 1px solid var(--line); min-height: 48px; }
+.catlist li.confirm { flex-wrap: wrap; }
+.catlist .cname { flex: 1; min-width: 0; overflow-wrap: break-word; font-weight: 500; }
+.catlist .csub { font-size: 12.5px; white-space: nowrap; }
+.catlist li input { flex: 1; min-width: 0; }
+.catlist .cwarn { flex: 1 1 100%; font-size: 14px; }
+.catlist .confirm .ghost, .catlist .confirm .primary { flex: 1; padding: 9px 12px; }
+.ib { min-width: 38px; min-height: 38px; border: 0; background: transparent; color: var(--muted); border-radius: 8px; font-size: 16px; padding: 0; }
+.ib:hover { background: var(--bg); color: var(--accent); }
+.ib.danger:hover { color: var(--neg); }
+.ib.ok { color: var(--pos); }
+.sheet-card > * { flex-shrink: 0; }

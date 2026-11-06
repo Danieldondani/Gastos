@@ -63,13 +63,19 @@
             <input id="date" type="date" required>
           </label>
         </div>
-        <label for="cat">Categoría
-          <input id="cat" type="text" list="catList" placeholder="Gasolina, Cenas, Uni…" required>
+        <div class="field">
+          <div class="fieldhead">
+            <label for="cat">Categoría</label>
+            <button class="menu-btn" type="button" id="catMenu" aria-label="Editar categorías" title="Editar categorías">
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+            </button>
+          </div>
+          <input id="cat" type="text" list="catList" placeholder="Gasolina, Comida, Uni…" required>
           <datalist id="catList"></datalist>
-        </label>
+        </div>
         <div class="chips" id="chips" aria-label="Categorías rápidas"></div>
         <label for="note">Nota (opcional)
-          <input id="note" type="text" placeholder="Ej. Repsol, cena con Ana…">
+          <input id="note" type="text" placeholder="Ej. Petroprix, Kebab con Claudia…">
         </label>
         <div class="msg" id="msg" role="status"></div>
         <div class="actions">
@@ -122,6 +128,26 @@
     <p class="muted small">Exporta un archivo y guárdalo en Archivos o iCloud Drive. Si borras la app, o cambias de móvil, usa Restaurar copia y elige ese archivo.</p>
   </section>
 </div>
+<div class="sheet" id="catSheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="catSheetTitle">
+    <div class="sheet-head">
+      <h2 id="catSheetTitle">Categorías</h2>
+      <button class="ghost" type="button" id="catClose">Listo</button>
+    </div>
+    <div class="seg" role="group" aria-label="Tipo de categoría">
+      <button type="button" class="gasto" id="catTabGasto" aria-pressed="true">Gastos</button>
+      <button type="button" class="ingreso" id="catTabIngreso" aria-pressed="false">Ingresos</button>
+    </div>
+    <form class="catadd" id="catAddForm" autocomplete="off">
+      <input type="text" id="catNew" maxlength="30" placeholder="Nueva categoría" aria-label="Nombre de la nueva categoría">
+      <button class="primary" type="submit">Añadir</button>
+    </form>
+    <div class="msg" id="catMsg" role="status"></div>
+    <ul class="catlist" id="catList2"></ul>
+    <p class="muted small">Si cambias el nombre, se actualizan también tus movimientos. Si borras una categoría con movimientos, pasan a «Otros» (o «Otros ingresos»).</p>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

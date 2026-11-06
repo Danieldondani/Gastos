@@ -2,9 +2,11 @@
 (function () {
   var MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   var DEFAULTS = {
-    gasto: ["Gasolina", "Cenas", "Uni", "Comida", "Ocio", "Alquiler", "Transporte", "Otros"],
-    ingreso: ["Nómina", "Beca", "Familia", "Otros ingresos"]
+    gasto: ["Gasolina", "Comida", "Uni", "Ocio", "Transporte", "Otros"],
+    ingreso: ["Paga", "Beca", "Familia", "Otros ingresos"]
   };
+  var CAT_KEY = "cuentas-cats-v1";
+  var cats = null; /* { gasto: [...], ingreso: [...] } */
   var eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", useGrouping: "always" });
   var $ = function (id) { return document.getElementById(id); };
 
@@ -14,7 +16,7 @@
   function pad(n) { return String(n).padStart(2, "0"); }
   function monthKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1); }
   function todayStr() { var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
-  function esc(s) { var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; }
+  function esc(s) { var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function money(n) { return eur.format(n); }
   function mshort(n) { return eur.format(n).replace(/\s?€/, ""); }
   function shortMonth(key) { var p = key.split("-"); return MESES[+p[1] - 1].slice(0, 3) + " \u2019" + p[0].slice(2); }
@@ -167,13 +169,61 @@
   }
   $("importBtn").addEventListener("click", runImport);
 
-  function renderCats() {
-    var set = {}, list = [];
-    DEFAULTS[state.type].forEach(function (c) { set[c.toLowerCase()] = 1; list.push(c); });
-    state.items.filter(function (x) { return x.type === state.type; }).forEach(function (x) {
-      var k = String(x.cat).trim().toLowerCase();
-      if (k && !set[k]) { set[k] = 1; list.push(String(x.cat).trim()); }
+  function ckey(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+  function catLoad() {
+    try {
+      var c = JSON.parse(localStorage.getItem(CAT_KEY) || "null");
+      if (c && Array.isArray(c.gasto) && Array.isArray(c.ingreso)) return c;
+    } catch (e) {}
+    return null;
+  }
+  function catSave(silent) {
+    try { localStorage.setItem(CAT_KEY, JSON.stringify(cats)); } catch (e) {}
+    if (!silent) bump();
+  }
+  function cleanList(arr) {
+    var seen = {}, out = [];
+    (Array.isArray(arr) ? arr : []).forEach(function (c) {
+      var s = String(c == null ? "" : c).trim().replace(/\s+/g, " ").slice(0, 30), k = ckey(s);
+      if (s && !seen[k]) { seen[k] = 1; out.push(s); }
     });
+    return out;
+  }
+  /* mantiene la lista de categorías al día: crea la primera vez y añade las que aparecen en los movimientos */
+  function syncCats() {
+    var changed = false;
+    if (!cats) {
+      cats = catLoad();
+      if (!cats) {
+        if (state.items.length) {
+          var f = { gasto: {}, ingreso: {} };
+          state.items.forEach(function (x) {
+            if (!f[x.type]) return;
+            var k = ckey(x.cat); if (!k) return;
+            if (!f[x.type][k]) f[x.type][k] = { n: 0, name: String(x.cat).trim() };
+            f[x.type][k].n++;
+          });
+          cats = { gasto: [], ingreso: [] };
+          ["gasto", "ingreso"].forEach(function (t) {
+            cats[t] = Object.keys(f[t]).map(function (k) { return f[t][k]; }).sort(function (p, q) { return q.n - p.n; }).map(function (o) { return o.name; });
+          });
+        } else cats = { gasto: DEFAULTS.gasto.slice(), ingreso: DEFAULTS.ingreso.slice() };
+        changed = true;
+      }
+    }
+    state.items.forEach(function (x) {
+      var t = x.type, k = ckey(x.cat);
+      if (!cats[t] || !k) return;
+      if (!cats[t].some(function (c) { return ckey(c) === k; })) { cats[t].push(String(x.cat).trim()); changed = true; }
+    });
+    if (changed) catSave(true);
+  }
+
+  function renderCats() {
+    syncCats();
+    var t = state.type, freq = {};
+    state.items.forEach(function (x) { if (x.type === t) { var k = ckey(x.cat); freq[k] = (freq[k] || 0) + 1; } });
+    var list = cats[t].slice().sort(function (a, b) { return (freq[ckey(b)] || 0) - (freq[ckey(a)] || 0) || a.localeCompare(b, "es"); });
     $("catList").innerHTML = list.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
     $("chips").innerHTML = list.slice(0, 8).map(function (c) { return '<button type="button" class="chip" data-cat="' + esc(c) + '">' + esc(c) + "</button>"; }).join("");
   }
@@ -190,7 +240,7 @@
     state.type = t;
     $("typeGasto").setAttribute("aria-pressed", t === "gasto");
     $("typeIngreso").setAttribute("aria-pressed", t === "ingreso");
-    $("cat").placeholder = t === "gasto" ? "Gasolina, Cenas, Uni…" : "Nómina, Beca…";
+    $("cat").placeholder = t === "gasto" ? "Gasolina, Comida, Uni…" : "Paga, Beca…";
     renderCats();
   }
   $("typeGasto").addEventListener("click", function () { setType("gasto"); });
@@ -246,7 +296,7 @@
     if (!date) { msg.textContent = "Elige una fecha."; return; }
     if (!store) { msg.textContent = "Espera un segundo, todavía está cargando."; return; }
     var key = cat.toLowerCase();
-    var existing = state.items.map(function (x) { return String(x.cat).trim(); }).concat(DEFAULTS.gasto, DEFAULTS.ingreso)
+    var existing = (cats ? cats[state.type] : []).concat(state.items.map(function (x) { return String(x.cat).trim(); }))
       .filter(function (c) { return c.toLowerCase() === key; })[0];
     if (!existing) existing = cat.charAt(0).toUpperCase() + cat.slice(1);
     var item = {
@@ -261,6 +311,86 @@
       $("amount").value = ""; $("note").value = ""; $("amount").focus();
       render();
     }).catch(function () { msg.textContent = "No se pudo guardar. Inténtalo de nuevo."; });
+  });
+
+  /* ---------- gestor de categorías ---------- */
+  var catTab = "gasto", catEdit = null, catDel = null;
+  function fallbackName(t) { return t === "gasto" ? "Otros" : "Otros ingresos"; }
+  function catUsage(t, name) { var k = ckey(name); return state.items.filter(function (x) { return x.type === t && ckey(x.cat) === k; }).length; }
+  function catFind(t, name) { var k = ckey(name); return cats[t].filter(function (c) { return ckey(c) === k; })[0]; }
+  function catMsg(text, ok) { var m = $("catMsg"); m.textContent = text || ""; m.className = ok ? "msg ok" : "msg"; }
+  function openCats() { syncCats(); catTab = state.type; catEdit = null; catDel = null; catMsg(""); $("catSheet").hidden = false; renderCatMgr(); }
+  function closeCats() { $("catSheet").hidden = true; catEdit = null; catDel = null; renderCats(); try { $("catMenu").focus(); } catch (e) {} }
+  function renderCatMgr() {
+    $("catTabGasto").setAttribute("aria-pressed", catTab === "gasto");
+    $("catTabIngreso").setAttribute("aria-pressed", catTab === "ingreso");
+    $("catNew").placeholder = catTab === "gasto" ? "Nueva categoría de gasto" : "Nueva categoría de ingreso";
+    var list = cats[catTab].slice().sort(function (a, b) { return a.localeCompare(b, "es"); });
+    if (!list.length) { $("catList2").innerHTML = '<li class="muted">No hay categorías. Añade la primera arriba.</li>'; return; }
+    $("catList2").innerHTML = list.map(function (c) {
+      var k = ckey(c), n = catUsage(catTab, c), ak = esc(k);
+      if (catEdit === k) return "<li data-k='" + ak + "'><input type='text' class='cedit' maxlength='30' value='" + esc(c) + "' aria-label='Nuevo nombre'><button type='button' class='ib ok' data-act='save' aria-label='Guardar nombre'>✓</button><button type='button' class='ib' data-act='cancel' aria-label='Cancelar'>✕</button></li>";
+      if (catDel === k) return "<li class='confirm' data-k='" + ak + "'><div class='cwarn'>«" + esc(c) + "» tiene " + n + (n === 1 ? " movimiento" : " movimientos") + ". Pasarán a «" + esc(fallbackName(catTab)) + "».</div><button type='button' class='ghost' data-act='cancel'>Cancelar</button><button type='button' class='primary' data-act='delok'>Borrar</button></li>";
+      return "<li data-k='" + ak + "'><span class='cname'>" + esc(c) + "</span><span class='muted csub'>" + n + " mov.</span><button type='button' class='ib' data-act='edit' aria-label='Cambiar nombre'>✎</button><button type='button' class='ib danger' data-act='del' aria-label='Borrar categoría'>✕</button></li>";
+    }).join("");
+  }
+  function renameCat(oldName, raw) {
+    var nn = String(raw || "").trim().replace(/\s+/g, " ");
+    if (!nn) { catMsg("Escribe un nombre."); return; }
+    var t = catTab, ok = ckey(oldName), canon = nn, merged = false;
+    if (ckey(nn) !== ok) { var ex = catFind(t, nn); if (ex) { canon = ex; merged = true; } }
+    var changed = state.items.filter(function (x) { return x.type === t && ckey(x.cat) === ok; }).map(function (x) { return Object.assign({}, x, { cat: canon }); });
+    cats[t] = cats[t].filter(function (c) { return ckey(c) !== ok; });
+    if (!merged) cats[t].push(canon);
+    catSave(false); catEdit = null;
+    if (changed.length) store.addMany(changed);
+    catMsg(merged ? "Unidas en «" + canon + "»." : "Nombre cambiado.", true);
+    renderCatMgr(); render();
+  }
+  function deleteCat(name, confirmed) {
+    var t = catTab, k = ckey(name), n = catUsage(t, name), fb = fallbackName(t);
+    if (k === ckey(fb) && n > 0) { catMsg("«" + fb + "» tiene movimientos y no se puede borrar. Puedes cambiarle el nombre."); return; }
+    if (n > 0 && !confirmed) { catDel = k; renderCatMgr(); return; }
+    var moved = [];
+    if (n > 0) {
+      var target = catFind(t, fb);
+      if (!target) { target = fb; cats[t].push(fb); }
+      moved = state.items.filter(function (x) { return x.type === t && ckey(x.cat) === k; }).map(function (x) { return Object.assign({}, x, { cat: target }); });
+    }
+    cats[t] = cats[t].filter(function (c) { return ckey(c) !== k; });
+    catSave(false); catDel = null;
+    if (moved.length) store.addMany(moved);
+    catMsg("Categoría borrada" + (n ? ". " + n + (n === 1 ? " movimiento pasó" : " movimientos pasaron") + " a «" + fb + "»." : "."), true);
+    renderCatMgr(); render();
+  }
+  $("catMenu").addEventListener("click", openCats);
+  $("catClose").addEventListener("click", closeCats);
+  $("catSheet").addEventListener("click", function (e) { if (e.target === $("catSheet")) closeCats(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("catSheet").hidden) closeCats(); });
+  $("catTabGasto").addEventListener("click", function () { catTab = "gasto"; catEdit = null; catDel = null; catMsg(""); renderCatMgr(); });
+  $("catTabIngreso").addEventListener("click", function () { catTab = "ingreso"; catEdit = null; catDel = null; catMsg(""); renderCatMgr(); });
+  $("catAddForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = $("catNew").value.trim().replace(/\s+/g, " ");
+    if (!v) { catMsg("Escribe un nombre."); return; }
+    if (catFind(catTab, v)) { catMsg("Esa categoría ya existe."); return; }
+    cats[catTab].push(v); catSave(false);
+    $("catNew").value = ""; catMsg("«" + v + "» añadida.", true);
+    renderCatMgr(); renderCats();
+  });
+  $("catList2").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-act]"); if (!b) return;
+    var li = b.closest("li"), k = li.getAttribute("data-k"), act = b.getAttribute("data-act"), name = catFind(catTab, k);
+    if (!name) return;
+    catMsg("");
+    if (act === "edit") { catEdit = k; catDel = null; renderCatMgr(); var inp = $("catList2").querySelector(".cedit"); if (inp) { inp.focus(); inp.select(); } }
+    else if (act === "cancel") { catEdit = null; catDel = null; renderCatMgr(); }
+    else if (act === "save") renameCat(name, li.querySelector(".cedit").value);
+    else if (act === "del") deleteCat(name, false);
+    else if (act === "delok") deleteCat(name, true);
+  });
+  $("catList2").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target.classList.contains("cedit")) { e.preventDefault(); var sv = e.target.parentNode.querySelector("[data-act='save']"); if (sv) sv.click(); }
   });
 
   /* ---------- copia de seguridad ---------- */
@@ -282,7 +412,7 @@
   async function exportBackup() {
     var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg ok";
     var name = "cuentas-" + todayStr() + ".json";
-    var json = JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items }, null, 1);
+    var json = JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items, categories: cats }, null, 1);
     var done = false, file = null;
     try { file = new File([json], name, { type: "application/json" }); } catch (e) { file = null; }
     try {
@@ -320,7 +450,7 @@
         var data = JSON.parse(r.result);
         var list = (Array.isArray(data) ? data : data.items).map(cleanItem).filter(Boolean);
         if (!list.length) throw new Error("vacio");
-        pendingRestore = { list: list, at: data.exportedAt ? Date.parse(data.exportedAt) : null };
+        pendingRestore = { list: list, at: data.exportedAt ? Date.parse(data.exportedAt) : null, cats: (!Array.isArray(data) && data.categories) ? data.categories : null };
         var dates = list.map(function (x) { return x.date; }).sort();
         $("restoreText").textContent = "El archivo tiene " + list.length + " movimientos (de " + monthName(dates[0].slice(0, 7)) + " a " + monthName(dates[dates.length - 1].slice(0, 7)) + "). Combinar los añade a lo que ya tienes. Reemplazar todo borra lo actual y deja solo el archivo.";
         $("restoreChoice").hidden = false;
@@ -336,6 +466,14 @@
   async function doRestore(replace) {
     if (!pendingRestore || !store) return;
     var p = pendingRestore; pendingRestore = null; $("restoreChoice").hidden = true;
+    syncCats();
+    if (p.cats) {
+      ["gasto", "ingreso"].forEach(function (t) {
+        var incoming = cleanList(p.cats[t]);
+        cats[t] = replace ? incoming : cleanList(cats[t].concat(incoming));
+      });
+      catSave(true);
+    } else if (replace) { cats = null; try { localStorage.removeItem(CAT_KEY); } catch (e) {} }
     if (replace) await store.replaceAll(p.list); else await store.addMany(p.list);
     importDone = true;
     if (replace) markBackup(p.at);
