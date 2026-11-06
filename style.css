@@ -129,3 +129,36 @@ button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 #histTable th, #histTable td { padding-left: 6px; padding-right: 6px; }
 #histTable td.num { font-size: 13px; white-space: nowrap; }
 #backupMsg:empty { display: none; }
+
+/* tablas que caben en la pantalla sin deslizar */
+table.cat td, table.cat th, table.mov td, table.mov th { padding-left: 6px; padding-right: 6px; }
+table.cat td.num, table.mov td.num { font-size: 13px; }
+.mname { font-weight: 600; overflow-wrap: anywhere; }
+.msub { font-size: 12.5px; overflow-wrap: anywhere; }
+.pcell { width: 38%; min-width: 96px; }
+.pct { position: relative; height: 24px; border-radius: 7px; background: var(--line); overflow: hidden; }
+.pct .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 7px; }
+.pct.neg .fill { background: var(--neg); }
+.pct.pos .fill { background: var(--pos); }
+.pct b { position: relative; display: flex; align-items: center; justify-content: center; height: 100%; font: 600 12px var(--font-num); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .65); }
+table.mov .edit, table.mov .del { min-width: 34px; min-height: 34px; padding: 0; font-size: 16px; line-height: 1; }
+@media (prefers-reduced-motion: no-preference) { .pct .fill { transition: width .25s ease; } }
+
+@media (max-width: 400px) {
+  .panel { padding: 14px; }
+  #histTable th, #histTable td { padding-left: 4px; padding-right: 4px; }
+  #histTable td.num { font-size: 12px; }
+  #histTable th { letter-spacing: 0.03em; }
+}
+
+th { white-space: nowrap; }
+.mname { font-size: 14.5px; overflow-wrap: break-word; word-break: normal; }
+.pcell { width: 30%; min-width: 86px; }
+
+@media (max-width: 380px) {
+  .pcell { min-width: 70px; }
+  .mname { font-size: 14px; }
+  #histTable td.num { font-size: 11.5px; }
+  .wrap { gap: 16px; }
+  body { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+}

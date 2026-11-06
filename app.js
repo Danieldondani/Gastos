@@ -77,12 +77,13 @@
     if (!rows.length) return '<div class="empty">Aún no hay ' + (kind === "neg" ? "gastos" : "ingresos") + " este mes.</div>";
     var body = rows.map(function (r) {
       var pct = total > 0 ? (r.total / total) * 100 : 0;
-      return "<tr><td>" + esc(r.name) + '</td><td class="r num muted">' + r.n + '</td><td class="r num">' + money(r.total) +
-        '</td><td style="width:26%"><div class="bar ' + kind + '" title="' + pct.toFixed(0) + '%"><span style="width:' + pct.toFixed(1) + '%"></span></div></td>' +
-        '<td class="r num muted">' + pct.toFixed(0) + "%</td></tr>";
+      var label = pct > 0 && pct < 1 ? "<1%" : Math.round(pct) + "%";
+      return "<tr><td><div class='mname'>" + esc(r.name) + "</div><div class='msub muted'>" + r.n + (r.n === 1 ? " mov." : " movs.") + "</div></td>" +
+        "<td class='r num' style='white-space:nowrap'>" + mshort(r.total) + "</td>" +
+        "<td class='pcell'><div class='pct " + kind + "' role='img' aria-label='" + label + " del total'><span class='fill' style='width:" + Math.max(pct, 2).toFixed(1) + "%'></span><b>" + label + "</b></div></td></tr>";
     }).join("");
-    return "<table><thead><tr><th>Categoría</th><th class='r'>Mov.</th><th class='r'>Total</th><th></th><th class='r'>%</th></tr></thead><tbody>" + body +
-      "</tbody><tfoot><tr><td>Total</td><td></td><td class='r num'>" + money(total) + "</td><td></td><td></td></tr></tfoot></table>";
+    return "<table class='cat'><thead><tr><th>Categoría</th><th class='r'>Total €</th><th>% del total</th></tr></thead><tbody>" + body +
+      "</tbody><tfoot><tr><td>Total</td><td class='r num'>" + mshort(total) + "</td><td></td></tr></tfoot></table>";
   }
 
   function render() {
@@ -104,12 +105,14 @@
 
     var movs = items.slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : (b.ts || 0) - (a.ts || 0); });
     $("movTable").innerHTML = movs.length
-      ? "<table><thead><tr><th>Fecha</th><th>Categoría</th><th>Nota</th><th class='r'>Importe</th><th></th></tr></thead><tbody>" +
+      ? "<table class='mov'><thead><tr><th>Movimiento</th><th class='r'>Importe €</th><th></th></tr></thead><tbody>" +
         movs.map(function (x) {
           var neg = x.type === "gasto";
-          return "<tr><td class='num muted'>" + fmtDate(x.date) + "</td><td>" + esc(x.cat) + "</td><td class='muted'>" + esc(x.note || "") +
-            "</td><td class='r num " + (neg ? "amt-neg" : "amt-pos") + "'>" + (neg ? "−" : "+") + money(Number(x.amount)).replace("-", "") +
-            "</td><td class='r' style='white-space:nowrap'><button class='edit' data-id='" + esc(x.id) + "' aria-label='Editar movimiento'>Editar</button><button class='del' data-id='" + esc(x.id) + "' aria-label='Borrar movimiento'>Borrar</button></td></tr>";
+          var subt = fmtDate(x.date) + (x.note ? " · " + esc(x.note) : "");
+          return "<tr><td><div class='mname'>" + esc(x.cat) + "</div><div class='msub muted'>" + subt + "</div></td>" +
+            "<td class='r num " + (neg ? "amt-neg" : "amt-pos") + "' style='white-space:nowrap'>" + (neg ? "−" : "+") + mshort(Number(x.amount)) + "</td>" +
+            "<td class='r' style='white-space:nowrap'><button class='edit' data-id='" + esc(x.id) + "' aria-label='Editar movimiento'>✎</button>" +
+            "<button class='del' data-id='" + esc(x.id) + "' aria-label='Borrar movimiento'>✕</button></td></tr>";
         }).join("") + "</tbody></table>"
       : '<div class="empty">Todavía no has añadido nada en ' + esc(monthName(state.month)) + ". Usa el formulario para registrar tu primer gasto o ingreso.</div>";
 
