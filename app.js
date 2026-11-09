@@ -189,7 +189,7 @@
     });
     return out;
   }
-  /* mantiene la lista de categorías al día: crea la primera vez y añade las que aparecen en los movimientos */
+  /* mantiene la lista de categorías al día: crea la primera vez, añade las que aparecen en los movimientos y las ancladas */
   function syncCats() {
     var changed = false;
     if (!cats) {
@@ -216,16 +216,34 @@
       if (!cats[t] || !k) return;
       if (!cats[t].some(function (c) { return ckey(c) === k; })) { cats[t].push(String(x.cat).trim()); changed = true; }
     });
+    /* primera vez con estrellas: se anclan las 8 más usadas de cada tipo, igual que los atajos de antes */
+    if (!cats.pins || !Array.isArray(cats.pins.gasto) || !Array.isArray(cats.pins.ingreso)) {
+      var use = { gasto: {}, ingreso: {} };
+      state.items.forEach(function (x) { if (use[x.type]) { var k = ckey(x.cat); use[x.type][k] = (use[x.type][k] || 0) + 1; } });
+      cats.pins = { gasto: [], ingreso: [] };
+      ["gasto", "ingreso"].forEach(function (t) {
+        cats[t] = cats[t].slice().sort(function (p, q) { return (use[t][ckey(q)] || 0) - (use[t][ckey(p)] || 0); });
+        cats.pins[t] = cats[t].slice(0, 8).map(ckey);
+      });
+      changed = true;
+    }
+    ["gasto", "ingreso"].forEach(function (t) {
+      var keys = cats[t].map(ckey), before = cats.pins[t].length;
+      cats.pins[t] = cats.pins[t].filter(function (k, i, arr) { return keys.indexOf(k) >= 0 && arr.indexOf(k) === i; });
+      if (cats.pins[t].length !== before) changed = true;
+    });
     if (changed) catSave(true);
   }
+  function isPinned(t, name) { return cats.pins[t].indexOf(ckey(name)) >= 0; }
 
   function renderCats() {
     syncCats();
-    var t = state.type, freq = {};
-    state.items.forEach(function (x) { if (x.type === t) { var k = ckey(x.cat); freq[k] = (freq[k] || 0) + 1; } });
-    var list = cats[t].slice().sort(function (a, b) { return (freq[ckey(b)] || 0) - (freq[ckey(a)] || 0) || a.localeCompare(b, "es"); });
-    $("catList").innerHTML = list.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
-    $("chips").innerHTML = list.slice(0, 8).map(function (c) { return '<button type="button" class="chip" data-cat="' + esc(c) + '">' + esc(c) + "</button>"; }).join("");
+    var t = state.type;
+    $("catList").innerHTML = cats[t].map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
+    var quick = cats[t].filter(function (c) { return isPinned(t, c); });
+    $("chips").innerHTML = quick.length
+      ? quick.map(function (c) { return '<button type="button" class="chip" data-cat="' + esc(c) + '">' + esc(c) + "</button>"; }).join("")
+      : (cats[t].length ? '<span class="muted small">Toca ≡ y marca con ★ las categorías que quieras tener a mano.</span>' : "");
   }
 
   function pendingChanges() { var m = metaGet(); return (m.rev || 0) - (m.backupRev || 0); }
@@ -325,14 +343,42 @@
     $("catTabGasto").setAttribute("aria-pressed", catTab === "gasto");
     $("catTabIngreso").setAttribute("aria-pressed", catTab === "ingreso");
     $("catNew").placeholder = catTab === "gasto" ? "Nueva categoría de gasto" : "Nueva categoría de ingreso";
-    var list = cats[catTab].slice().sort(function (a, b) { return a.localeCompare(b, "es"); });
+    var list = cats[catTab];
     if (!list.length) { $("catList2").innerHTML = '<li class="muted">No hay categorías. Añade la primera arriba.</li>'; return; }
-    $("catList2").innerHTML = list.map(function (c) {
-      var k = ckey(c), n = catUsage(catTab, c), ak = esc(k);
+    $("catList2").innerHTML = list.map(function (c, i) {
+      var k = ckey(c), n = catUsage(catTab, c), ak = esc(k), pin = isPinned(catTab, c);
       if (catEdit === k) return "<li data-k='" + ak + "'><input type='text' class='cedit' maxlength='30' value='" + esc(c) + "' aria-label='Nuevo nombre'><button type='button' class='ib ok' data-act='save' aria-label='Guardar nombre'>✓</button><button type='button' class='ib' data-act='cancel' aria-label='Cancelar'>✕</button></li>";
       if (catDel === k) return "<li class='confirm' data-k='" + ak + "'><div class='cwarn'>«" + esc(c) + "» tiene " + n + (n === 1 ? " movimiento" : " movimientos") + ". Pasarán a «" + esc(fallbackName(catTab)) + "».</div><button type='button' class='ghost' data-act='cancel'>Cancelar</button><button type='button' class='primary' data-act='delok'>Borrar</button></li>";
-      return "<li data-k='" + ak + "'><span class='cname'>" + esc(c) + "</span><span class='muted csub'>" + n + " mov.</span><button type='button' class='ib' data-act='edit' aria-label='Cambiar nombre'>✎</button><button type='button' class='ib danger' data-act='del' aria-label='Borrar categoría'>✕</button></li>";
+      return "<li data-k='" + ak + "'>" +
+        "<button type='button' class='ib star" + (pin ? " on" : "") + "' data-act='pin' aria-pressed='" + pin + "' aria-label='" + (pin ? "Quitar de las categorías a mano" : "Tener esta categoría a mano") + "'>" + (pin ? "★" : "☆") + "</button>" +
+        "<div class='cinfo'><div class='cname'>" + esc(c) + "</div><div class='csub muted'>" + n + " mov.</div></div>" +
+        "<button type='button' class='ib' data-act='up' aria-label='Subir'" + (i === 0 ? " disabled" : "") + ">▲</button>" +
+        "<button type='button' class='ib' data-act='down' aria-label='Bajar'" + (i === list.length - 1 ? " disabled" : "") + ">▼</button>" +
+        "<button type='button' class='ib' data-act='edit' aria-label='Cambiar nombre'>✎</button>" +
+        "<button type='button' class='ib danger' data-act='del' aria-label='Borrar categoría'>✕</button></li>";
     }).join("");
+  }
+  function focusAct(k, acts) {
+    var lis = $("catList2").querySelectorAll("li");
+    for (var i = 0; i < lis.length; i++) {
+      if (lis[i].getAttribute("data-k") !== k) continue;
+      for (var j = 0; j < acts.length; j++) {
+        var b = lis[i].querySelector("[data-act='" + acts[j] + "']");
+        if (b && !b.disabled) { try { b.focus(); } catch (e) {} return; }
+      }
+    }
+  }
+  function togglePin(name) {
+    var t = catTab, k = ckey(name), p = cats.pins[t], i = p.indexOf(k);
+    if (i >= 0) p.splice(i, 1); else p.push(k);
+    catSave(false); renderCatMgr(); renderCats(); focusAct(k, ["pin"]);
+  }
+  function moveCat(name, dir) {
+    var t = catTab, i = cats[t].indexOf(name), j = i + dir;
+    if (i < 0 || j < 0 || j >= cats[t].length) return;
+    var tmp = cats[t][i]; cats[t][i] = cats[t][j]; cats[t][j] = tmp;
+    catSave(false); renderCatMgr(); renderCats();
+    focusAct(ckey(name), dir < 0 ? ["up", "down"] : ["down", "up"]);
   }
   function renameCat(oldName, raw) {
     var nn = String(raw || "").trim().replace(/\s+/g, " ");
@@ -340,8 +386,11 @@
     var t = catTab, ok = ckey(oldName), canon = nn, merged = false;
     if (ckey(nn) !== ok) { var ex = catFind(t, nn); if (ex) { canon = ex; merged = true; } }
     var changed = state.items.filter(function (x) { return x.type === t && ckey(x.cat) === ok; }).map(function (x) { return Object.assign({}, x, { cat: canon }); });
-    cats[t] = cats[t].filter(function (c) { return ckey(c) !== ok; });
-    if (!merged) cats[t].push(canon);
+    var idx = cats[t].findIndex(function (c) { return ckey(c) === ok; });
+    var wasPinned = cats.pins[t].indexOf(ok) >= 0;
+    if (merged) cats[t].splice(idx, 1); else cats[t][idx] = canon;
+    cats.pins[t] = cats.pins[t].filter(function (k) { return k !== ok; });
+    if (wasPinned && cats.pins[t].indexOf(ckey(canon)) < 0) cats.pins[t].push(ckey(canon));
     catSave(false); catEdit = null;
     if (changed.length) store.addMany(changed);
     catMsg(merged ? "Unidas en «" + canon + "»." : "Nombre cambiado.", true);
@@ -358,6 +407,7 @@
       moved = state.items.filter(function (x) { return x.type === t && ckey(x.cat) === k; }).map(function (x) { return Object.assign({}, x, { cat: target }); });
     }
     cats[t] = cats[t].filter(function (c) { return ckey(c) !== k; });
+    cats.pins[t] = cats.pins[t].filter(function (x) { return x !== k; });
     catSave(false); catDel = null;
     if (moved.length) store.addMany(moved);
     catMsg("Categoría borrada" + (n ? ". " + n + (n === 1 ? " movimiento pasó" : " movimientos pasaron") + " a «" + fb + "»." : "."), true);
@@ -386,6 +436,9 @@
     if (act === "edit") { catEdit = k; catDel = null; renderCatMgr(); var inp = $("catList2").querySelector(".cedit"); if (inp) { inp.focus(); inp.select(); } }
     else if (act === "cancel") { catEdit = null; catDel = null; renderCatMgr(); }
     else if (act === "save") renameCat(name, li.querySelector(".cedit").value);
+    else if (act === "pin") togglePin(name);
+    else if (act === "up") moveCat(name, -1);
+    else if (act === "down") moveCat(name, 1);
     else if (act === "del") deleteCat(name, false);
     else if (act === "delok") deleteCat(name, true);
   });
@@ -468,10 +521,15 @@
     var p = pendingRestore; pendingRestore = null; $("restoreChoice").hidden = true;
     syncCats();
     if (p.cats) {
+      var inPins = (p.cats.pins && Array.isArray(p.cats.pins.gasto) && Array.isArray(p.cats.pins.ingreso)) ? p.cats.pins : null;
+      var newPins = { gasto: [], ingreso: [] };
       ["gasto", "ingreso"].forEach(function (t) {
         var incoming = cleanList(p.cats[t]);
         cats[t] = replace ? incoming : cleanList(cats[t].concat(incoming));
+        var ip = inPins ? inPins[t].map(ckey) : [];
+        newPins[t] = replace ? ip : cats.pins[t].concat(ip).filter(function (k, i, arr) { return arr.indexOf(k) === i; });
       });
+      cats.pins = (replace && !inPins) ? null : newPins;
       catSave(true);
     } else if (replace) { cats = null; try { localStorage.removeItem(CAT_KEY); } catch (e) {} }
     if (replace) await store.replaceAll(p.list); else await store.addMany(p.list);

@@ -1,5 +1,5 @@
 /* Service worker: guarda la app para que abra sin conexion. */
-const CACHE = "cuentas-v5"; /* sube el numero (v2, v3...) cada vez que cambies archivos */
+const CACHE = "cuentas-v6"; /* sube el numero (v2, v3...) cada vez que cambies archivos */
 const ASSETS = ["./", "index.html", "style.css", "app.js", "manifest.json", "historial.json",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 

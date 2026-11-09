@@ -189,3 +189,13 @@ th { white-space: nowrap; }
 .ib.danger:hover { color: var(--neg); }
 .ib.ok { color: var(--pos); }
 .sheet-card > * { flex-shrink: 0; }
+
+/* ---- estrella y orden ---- */
+.catlist .cinfo { flex: 1; min-width: 0; }
+.catlist .cname { font-weight: 500; overflow-wrap: break-word; }
+.catlist .csub { font-size: 12.5px; }
+.catlist .ib { min-width: 34px; min-height: 40px; }
+.catlist li { gap: 2px; }
+.ib.star { font-size: 20px; color: var(--muted); }
+.ib.star.on { color: #f2b84b; }
+.ib[disabled] { opacity: .28; pointer-events: none; }
