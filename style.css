@@ -199,3 +199,6 @@ th { white-space: nowrap; }
 .ib.star { font-size: 20px; color: var(--muted); }
 .ib.star.on { color: #f2b84b; }
 .ib[disabled] { opacity: .28; pointer-events: none; }
+
+#exportConfirm { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--neg); border-radius: 8px; padding: 12px; background: var(--bg); }
+#exportConfirm p { margin: 0; }

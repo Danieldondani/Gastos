@@ -124,8 +124,15 @@
         <button class="ghost" type="button" id="restoreCancel">Cancelar</button>
       </div>
     </div>
+    <div id="exportConfirm" hidden>
+      <p id="exportConfirmText"></p>
+      <div class="actions">
+        <button class="ghost" type="button" id="exportCancel">Cancelar</button>
+        <button class="primary" type="button" id="exportGo">Exportar igualmente</button>
+      </div>
+    </div>
     <div class="msg ok" id="backupMsg" role="status"></div>
-    <p class="muted small">Exporta un archivo y guárdalo en Archivos o iCloud Drive. Si borras la app, o cambias de móvil, usa Restaurar copia y elige ese archivo.</p>
+    <p class="muted small">Se guarda un solo archivo, siempre con el mismo nombre (cuentas-copia.json). Guárdalo en Archivos o iCloud Drive y elige Reemplazar para quedarte solo con la última copia. Si borras la app, o cambias de móvil, usa Restaurar copia y elige ese archivo.</p>
   </section>
 </div>
 <div class="sheet" id="catSheet" hidden>

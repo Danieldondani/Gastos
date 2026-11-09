@@ -460,11 +460,22 @@
     var el = $("backupInfo"); el.textContent = t; el.classList.toggle("warn", warn);
   }
   function markBackup(ts) {
-    var m = metaGet(); m.backupRev = m.rev || 0; m.backupAt = ts || Date.now(); metaSet(m);
+    var m = metaGet(); m.backupRev = m.rev || 0; m.backupAt = ts || Date.now(); m.backupCount = state.items.length; metaSet(m);
   }
-  async function exportBackup() {
+  function exportBackup() {
+    var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg";
+    $("exportConfirm").hidden = true;
+    if (!state.items.length) { msg.textContent = "No hay movimientos que guardar. Si estás en un móvil nuevo, usa Restaurar copia."; return; }
+    var m = metaGet();
+    if (m.backupCount && state.items.length < m.backupCount * 0.8) {
+      $("exportConfirmText").textContent = "Ahora tienes " + state.items.length + " movimientos y la última copia tenía " + m.backupCount + ". Si exportas, el archivo nuevo sustituirá al anterior y esa diferencia se perderá. ¿Seguro?";
+      $("exportConfirm").hidden = false; return;
+    }
+    doExport();
+  }
+  async function doExport() {
     var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg ok";
-    var name = "cuentas-" + todayStr() + ".json";
+    var name = "cuentas-copia.json";
     var json = JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items, categories: cats }, null, 1);
     var done = false, file = null;
     try { file = new File([json], name, { type: "application/json" }); } catch (e) { file = null; }
@@ -481,7 +492,7 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     }
     markBackup();
-    msg.textContent = "Copia lista. Guárdala en Archivos o en iCloud Drive.";
+    msg.textContent = "Copia lista: cuentas-copia.json. Guárdala en Archivos y, si pregunta, elige Reemplazar.";
     renderBackup(); renderStatus();
   }
   var pendingRestore = null;
@@ -494,6 +505,8 @@
     return o;
   }
   $("exportBtn").addEventListener("click", exportBackup);
+  $("exportGo").addEventListener("click", function () { $("exportConfirm").hidden = true; doExport(); });
+  $("exportCancel").addEventListener("click", function () { $("exportConfirm").hidden = true; });
   $("restoreInput").addEventListener("change", function (e) {
     var f = e.target.files && e.target.files[0]; if (!f) return;
     var msg = $("backupMsg"); msg.className = "msg"; msg.textContent = "";
