@@ -202,3 +202,14 @@ th { white-space: nowrap; }
 
 #exportConfirm { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--neg); border-radius: 8px; padding: 12px; background: var(--bg); }
 #exportConfirm p { margin: 0; }
+
+#shortcutAsk { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; background: var(--bg); }
+#shortcutAsk p { margin: 0; }
+#shortcutBtn { width: 100%; }
+.how { font-size: 14px; color: var(--muted); }
+.how summary { cursor: pointer; padding: 4px 0; color: var(--fg); font-weight: 500; }
+.how ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.how b { color: var(--fg); font-weight: 600; }
+
+/* iOS hace zoom al enfocar un campo si su letra es menor de 16 px: se fuerza en todos */
+input, input[type="text"], input[type="date"], input[type="number"], input[inputmode], select, textarea { font-size: 16px !important; }

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Cuentas del mes</title>
 <meta name="description" content="Ingresos y gastos mensuales por categoría.">
 <meta name="theme-color" content="#000000">
@@ -114,7 +114,7 @@
     <div class="actions">
       <button class="primary" type="button" id="exportBtn">Exportar copia</button>
       <label class="ghost filebtn" for="restoreInput">Restaurar copia</label>
-      <input type="file" id="restoreInput" accept=".json,application/json" hidden>
+      <input type="file" id="restoreInput" accept=".json,.txt,application/json,text/plain" hidden>
     </div>
     <div id="restoreChoice" hidden>
       <p id="restoreText"></p>
@@ -124,6 +124,25 @@
         <button class="ghost" type="button" id="restoreCancel">Cancelar</button>
       </div>
     </div>
+    <button class="ghost" type="button" id="shortcutBtn">Guardar con Atajo (sobrescribe)</button>
+    <div id="shortcutAsk" hidden>
+      <p>¿El atajo ha guardado el archivo?</p>
+      <div class="actions">
+        <button class="ghost" type="button" id="shortcutNo">No</button>
+        <button class="primary" type="button" id="shortcutYes">Sí, guardado</button>
+      </div>
+    </div>
+    <details class="how">
+      <summary>Cómo crear el atajo (una sola vez)</summary>
+      <ol>
+        <li>Abre la app <b>Atajos</b> y pulsa <b>+</b> para crear uno nuevo.</li>
+        <li>Ponle exactamente este nombre: <b>Guardar cuentas</b>.</li>
+        <li>Añade la acción <b>Obtener portapapeles</b>.</li>
+        <li>Añade la acción <b>Establecer nombre</b> y escribe <b>cuentas-copia.json</b>.</li>
+        <li>Añade la acción <b>Guardar archivo</b>. Elige iCloud Drive, desactiva <b>Preguntar dónde guardar</b>, elige una carpeta y activa <b>Sobrescribir si existe</b> (sale al pulsar la flecha de la acción).</li>
+        <li>Desde aquí, pulsa <b>Guardar con Atajo</b>. Se abre Atajos, guarda el archivo y vuelves a la app.</li>
+      </ol>
+    </details>
     <div id="exportConfirm" hidden>
       <p id="exportConfirmText"></p>
       <div class="actions">
@@ -132,7 +151,7 @@
       </div>
     </div>
     <div class="msg ok" id="backupMsg" role="status"></div>
-    <p class="muted small">Se guarda un solo archivo, siempre con el mismo nombre (cuentas-copia.json). Guárdalo en Archivos o iCloud Drive y elige Reemplazar para quedarte solo con la última copia. Si borras la app, o cambias de móvil, usa Restaurar copia y elige ese archivo.</p>
+    <p class="muted small">Exportar copia crea un archivo con la fecha y la hora en el nombre, para guardarlo en iCloud Drive. Guardar con Atajo escribe siempre el mismo archivo y lo sobrescribe, así solo tienes una copia. Si borras la app, o cambias de móvil, usa Restaurar copia y elige el archivo.</p>
   </section>
 </div>
 <div class="sheet" id="catSheet" hidden>

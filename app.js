@@ -462,21 +462,26 @@
   function markBackup(ts) {
     var m = metaGet(); m.backupRev = m.rev || 0; m.backupAt = ts || Date.now(); m.backupCount = state.items.length; metaSet(m);
   }
-  function exportBackup() {
+  var pendingMode = null, awaitingShortcut = 0;
+  function buildBackup(pretty) {
+    return JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items, categories: cats }, null, pretty ? 1 : 0);
+  }
+  function exportBackup(mode) {
     var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg";
     $("exportConfirm").hidden = true;
     if (!state.items.length) { msg.textContent = "No hay movimientos que guardar. Si estás en un móvil nuevo, usa Restaurar copia."; return; }
     var m = metaGet();
     if (m.backupCount && state.items.length < m.backupCount * 0.8) {
       $("exportConfirmText").textContent = "Ahora tienes " + state.items.length + " movimientos y la última copia tenía " + m.backupCount + ". Si exportas, el archivo nuevo sustituirá al anterior y esa diferencia se perderá. ¿Seguro?";
+      pendingMode = mode === "shortcut" ? "shortcut" : "share";
       $("exportConfirm").hidden = false; return;
     }
-    doExport();
+    if (mode === "shortcut") runShortcut(); else doExport();
   }
   async function doExport() {
     var msg = $("backupMsg"); msg.textContent = ""; msg.className = "msg ok";
-    var name = "cuentas-copia.json";
-    var json = JSON.stringify({ app: "cuentas-del-mes", version: 1, exportedAt: new Date().toISOString(), items: state.items, categories: cats }, null, 1);
+    var d0 = new Date(), name = "cuentas-" + todayStr() + "_" + pad(d0.getHours()) + "-" + pad(d0.getMinutes()) + ".json";
+    var json = buildBackup(true);
     var done = false, file = null;
     try { file = new File([json], name, { type: "application/json" }); } catch (e) { file = null; }
     try {
@@ -492,7 +497,7 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     }
     markBackup();
-    msg.textContent = "Copia lista: cuentas-copia.json. Guárdala en Archivos y, si pregunta, elige Reemplazar.";
+    msg.textContent = "Copia lista: " + name + ". Guárdala en iCloud Drive.";
     renderBackup(); renderStatus();
   }
   var pendingRestore = null;
@@ -505,7 +510,34 @@
     return o;
   }
   $("exportBtn").addEventListener("click", exportBackup);
-  $("exportGo").addEventListener("click", function () { $("exportConfirm").hidden = true; doExport(); });
+  $("exportGo").addEventListener("click", function () {
+    $("exportConfirm").hidden = true;
+    if (pendingMode === "shortcut") runShortcut(); else doExport();
+  });
+  async function runShortcut() {
+    var msg = $("backupMsg"); msg.className = "msg"; msg.textContent = "";
+    try { await navigator.clipboard.writeText(buildBackup(false)); }
+    catch (e) { msg.textContent = "No se pudo copiar los datos. Usa Exportar copia."; return; }
+    awaitingShortcut = Date.now();
+    window.location.href = "shortcuts://run-shortcut?name=" + encodeURIComponent("Guardar cuentas") + "&input=clipboard";
+  }
+  $("shortcutBtn").addEventListener("click", function () { exportBackup("shortcut"); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || !awaitingShortcut) return;
+    var recent = Date.now() - awaitingShortcut < 5 * 60 * 1000;
+    awaitingShortcut = 0;
+    if (recent) $("shortcutAsk").hidden = false;
+  });
+  $("shortcutYes").addEventListener("click", function () {
+    $("shortcutAsk").hidden = true; markBackup();
+    var msg = $("backupMsg"); msg.className = "msg ok"; msg.textContent = "Copia marcada como hecha.";
+    renderBackup(); renderStatus();
+  });
+  $("shortcutNo").addEventListener("click", function () {
+    $("shortcutAsk").hidden = true;
+    var msg = $("backupMsg"); msg.className = "msg";
+    msg.textContent = "No cuenta como copia. Revisa que el atajo se llame «Guardar cuentas» o usa Exportar copia.";
+  });
   $("exportCancel").addEventListener("click", function () { $("exportConfirm").hidden = true; });
   $("restoreInput").addEventListener("change", function (e) {
     var f = e.target.files && e.target.files[0]; if (!f) return;
