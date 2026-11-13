@@ -141,6 +141,7 @@
     renderStatus();
     renderImport();
     renderBackup();
+    renderCharts();
   }
 
   var importing = false, importDone = false;
@@ -390,6 +391,7 @@
     var wasPinned = cats.pins[t].indexOf(ok) >= 0;
     if (merged) cats[t].splice(idx, 1); else cats[t][idx] = canon;
     cats.pins[t] = cats.pins[t].filter(function (k) { return k !== ok; });
+    if (cats.colors && cats.colors[t] && cats.colors[t][ok]) { var oc = cats.colors[t][ok]; delete cats.colors[t][ok]; if (!cats.colors[t][ckey(canon)]) cats.colors[t][ckey(canon)] = oc; }
     if (wasPinned && cats.pins[t].indexOf(ckey(canon)) < 0) cats.pins[t].push(ckey(canon));
     catSave(false); catEdit = null;
     if (changed.length) store.addMany(changed);
@@ -408,6 +410,7 @@
     }
     cats[t] = cats[t].filter(function (c) { return ckey(c) !== k; });
     cats.pins[t] = cats.pins[t].filter(function (x) { return x !== k; });
+    if (cats.colors && cats.colors[t]) delete cats.colors[t][k];
     catSave(false); catDel = null;
     if (moved.length) store.addMany(moved);
     catMsg("Categoría borrada" + (n ? ". " + n + (n === 1 ? " movimiento pasó" : " movimientos pasaron") + " a «" + fb + "»." : "."), true);
@@ -588,6 +591,254 @@
   $("restoreMerge").addEventListener("click", function () { doRestore(false); });
   $("restoreReplace").addEventListener("click", function () { doRestore(true); });
   $("restoreCancel").addEventListener("click", function () { pendingRestore = null; $("restoreChoice").hidden = true; });
+
+  /* ---------- gráficas ---------- */
+  var cv = { type: "gasto", scope: "todo", sel: null };
+  var view = "resumen";
+  var SLOTS = 7;
+  var STOP = {};
+  ("de la el los las un una unos unas y e o u a en con sin por para del al que se su sus mi mis tu lo le les es no si ya mas como pero este esta estos estas eso ese esa the and").split(" ").forEach(function (w) { STOP[w] = 1; });
+
+  function nrm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zñ\s]/g, " ").replace(/\s+/g, " ").trim(); }
+  function tokens(s) {
+    var seen = {}, out = [];
+    nrm(s).split(" ").forEach(function (w) { if (w.length >= 3 && !STOP[w] && !seen[w]) { seen[w] = 1; out.push(w); } });
+    return out;
+  }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function m3(key) { return cap(MESES[+key.split("-")[1] - 1].slice(0, 3)); }
+  function axisNum(n) { return n >= 1000 ? (n / 1000).toLocaleString("es-ES", { maximumFractionDigits: 1 }) + "k" : String(Math.round(n)); }
+  function pctLabel(p) { return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%"; }
+
+  /* cada categoría conserva su color (hueco 1-7); las demás van en gris */
+  function ensureColors(t) {
+    if (!cats || !state.items.length) return {};
+    if (!cats.colors || typeof cats.colors !== "object") cats.colors = {};
+    var map = cats.colors[t];
+    if (!map || typeof map !== "object") map = cats.colors[t] = {};
+    var valid = {}; cats[t].forEach(function (c) { valid[ckey(c)] = 1; });
+    var changed = false, used = {};
+    Object.keys(map).forEach(function (k) {
+      var s = map[k];
+      if (!valid[k] || !(s >= 1 && s <= SLOTS) || used[s]) { delete map[k]; changed = true; } else used[s] = 1;
+    });
+    var tot = {};
+    state.items.forEach(function (x) { if (x.type === t) { var k = ckey(x.cat); tot[k] = (tot[k] || 0) + (Number(x.amount) || 0); } });
+    Object.keys(tot).sort(function (a, b) { return tot[b] - tot[a]; }).forEach(function (k) {
+      if (map[k] || !valid[k] || tot[k] <= 0) return;
+      for (var s = 1; s <= SLOTS; s++) if (!used[s]) { map[k] = s; used[s] = 1; changed = true; break; }
+    });
+    if (changed) catSave(true);
+    return map;
+  }
+  function colorOf(map, k) { return map[k] ? "var(--c" + map[k] + ")" : "var(--n1)"; }
+
+  function polar(cx, cy, r, a) { var t = (a - 90) * Math.PI / 180; return [cx + r * Math.cos(t), cy + r * Math.sin(t)]; }
+  function donutPath(cx, cy, R, r, a0, a1) {
+    var p0 = polar(cx, cy, R, a0), p1 = polar(cx, cy, R, a1), q1 = polar(cx, cy, r, a1), q0 = polar(cx, cy, r, a0);
+    var big = a1 - a0 > 180 ? 1 : 0;
+    function f(p) { return p[0].toFixed(2) + " " + p[1].toFixed(2); }
+    return "M" + f(p0) + "A" + R + " " + R + " 0 " + big + " 1 " + f(p1) + "L" + f(q1) + "A" + r + " " + r + " 0 " + big + " 0 " + f(q0) + "Z";
+  }
+  function barPath(x, y, w, h, r) {
+    if (h <= 0) return "";
+    r = Math.min(r, w / 2, h);
+    return "M" + x + " " + (y + h) + "V" + (y + r) + "Q" + x + " " + y + " " + (x + r) + " " + y + "H" + (x + w - r) + "Q" + (x + w) + " " + y + " " + (x + w) + " " + (y + r) + "V" + (y + h) + "Z";
+  }
+  function niceMax(v) {
+    if (v <= 0) return 10;
+    var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), n = v / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+  }
+  function monthsRange(n) {
+    if (!state.items.length) return [];
+    var last = state.items.map(function (x) { return x.date.slice(0, 7); }).sort().pop();
+    if (state.month > last) last = state.month;
+    var out = []; for (var i = n - 1; i >= 0; i--) out.push(shiftMonth(last, -i));
+    var first = state.items.map(function (x) { return x.date.slice(0, 7); }).sort()[0];
+    while (out.length > 1 && out[0] < first && out[0] < shiftMonth(first, 0)) out.shift();
+    return out;
+  }
+  function monthTotals(months, type, catKey) {
+    var m = {}; months.forEach(function (k) { m[k] = 0; });
+    state.items.forEach(function (x) {
+      if (type && x.type !== type) return;
+      if (catKey && ckey(x.cat) !== catKey) return;
+      var k = x.date.slice(0, 7); if (k in m) m[k] += Number(x.amount) || 0;
+    });
+    return m;
+  }
+
+  /* columnas de un solo color, para una categoría: gasto mes a mes */
+  function miniBars(months, vals, color, label) {
+    var W = 300, H = 120, L = 30, T = 14, B = 20, pw = W - L - 4, ph = H - T - B;
+    var max = niceMax(Math.max.apply(null, months.map(function (k) { return vals[k]; }).concat([0])));
+    var slot = pw / months.length, bw = Math.min(24, slot - 6), s = "";
+    [0, 0.5, 1].forEach(function (f) {
+      var y = T + ph - ph * f;
+      s += '<line class="' + (f === 0 ? "axis" : "grid") + '" x1="' + L + '" x2="' + (W - 4) + '" y1="' + y + '" y2="' + y + '"/>' +
+        '<text class="ax" x="' + (L - 4) + '" y="' + (y + 3.5) + '" text-anchor="end">' + axisNum(max * f) + "</text>";
+    });
+    var peak = months.reduce(function (a, k) { return vals[k] > vals[a] ? k : a; }, months[0]);
+    months.forEach(function (k, i) {
+      var x = L + slot * i + (slot - bw) / 2, h = vals[k] / max * ph, sel = k === state.month;
+      if (sel) s += '<rect class="hl" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '"/>';
+      s += '<path d="' + barPath(x, T + ph - h, bw, h, 4) + '" fill="' + color + '"/>';
+      if (k === peak && vals[k] > 0) s += '<text class="vl" x="' + (x + bw / 2) + '" y="' + (T + ph - h - 4) + '" text-anchor="middle">' + axisNum(vals[k]) + "</text>";
+      s += '<text class="ax' + (sel ? " sel" : "") + '" x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + m3(k) + "</text>";
+      s += '<rect class="hit" x="' + (L + slot * i) + '" y="0" width="' + slot + '" height="' + H + '" data-m="' + k + '" tabindex="0" role="button" aria-label="' + esc(label + ", " + monthName(k) + ": " + money(vals[k])) + '"/>';
+    });
+    return '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" role="group" aria-label="' + esc(label) + '">' + s + "</svg>";
+  }
+
+  /* hábitos: agrupa las notas parecidas y suma lo que sueles gastar en cada cosa */
+  function habits(items) {
+    var df = {};
+    var rows = items.map(function (x) {
+      var tk = tokens(x.note); tk.forEach(function (w) { df[w] = (df[w] || 0) + 1; });
+      return { x: x, tk: tk };
+    });
+    var groups = {};
+    rows.forEach(function (r) {
+      var key = "";
+      r.tk.forEach(function (w) { if (!key || df[w] > df[key] || (df[w] === df[key] && w.length > key.length)) key = w; });
+      var g = groups[key] || (groups[key] = { key: key, total: 0, n: 0, last: "", names: {} });
+      var amt = Number(r.x.amount) || 0;
+      g.total += amt; g.n++;
+      if (r.x.date > g.last) g.last = r.x.date;
+      var nm = String(r.x.note || "").trim();
+      if (nm) g.names[nm] = (g.names[nm] || 0) + 1;
+    });
+    return Object.keys(groups).map(function (k) {
+      var g = groups[k], nms = Object.keys(g.names).sort(function (a, b) { return g.names[b] - g.names[a] || a.length - b.length; });
+      g.name = k ? nms[0] : "Sin nota"; g.more = k ? nms.slice(1, 3) : [];
+      g.avg = g.total / g.n; return g;
+    }).sort(function (a, b) { return (a.key ? 0 : 1) - (b.key ? 0 : 1) || b.total - a.total; });
+  }
+
+  function renderCharts() {
+    if (view !== "graficas") return;
+    syncCats();
+    var t = cv.type, isG = t === "gasto";
+    $("chGasto").setAttribute("aria-pressed", isG); $("chIngreso").setAttribute("aria-pressed", !isG);
+    $("chMes").setAttribute("aria-pressed", cv.scope === "mes"); $("chTodo").setAttribute("aria-pressed", cv.scope === "todo");
+    $("pieTitle").textContent = (isG ? "Gastos" : "Ingresos") + " por categoría";
+    $("pieScope").textContent = cv.scope === "mes" ? monthName(state.month) : "Todo el historial";
+    var cmap = ensureColors(t);
+
+    var all = state.items.filter(function (x) { return x.type === t; });
+    var scoped = cv.scope === "mes" ? all.filter(function (x) { return x.date.slice(0, 7) === state.month; }) : all;
+    var rows = groupByCat(scoped).filter(function (r) { return r.total > 0; });
+    var total = rows.reduce(function (a, r) { return a + r.total; }, 0);
+    rows.forEach(function (r) { r.k = ckey(r.name); });
+
+    if (!rows.length) {
+      $("pie").innerHTML = '<div class="empty">' + (cv.scope === "mes" ? "Sin " + (isG ? "gastos" : "ingresos") + " en " + esc(monthName(state.month)) + "." : "Aún no hay datos.") + "</div>";
+      $("rank").innerHTML = ""; $("detail").innerHTML = ""; $("detailPanel").hidden = true;
+    } else {
+      $("detailPanel").hidden = false;
+      if (!cv.sel || !rows.some(function (r) { return r.k === cv.sel; })) cv.sel = rows[0].k;
+      var sel = rows.filter(function (r) { return r.k === cv.sel; })[0];
+      /* tarta: categorías con color + «Otras» en gris */
+      var slices = rows.filter(function (r) { return cmap[r.k]; });
+      var restTotal = rows.reduce(function (a, r) { return a + (cmap[r.k] ? 0 : r.total); }, 0);
+      var parts = slices.map(function (r) { return { k: r.k, name: r.name, total: r.total, color: colorOf(cmap, r.k) }; });
+      if (restTotal > 0) parts.push({ k: "", name: "Otras", total: restTotal, color: "var(--n1)" });
+      var s = "", a = 0, gap = parts.length > 1 ? 1.4 : 0;
+      parts.forEach(function (p) {
+        var span = p.total / total * 360, a0 = a + gap / 2, a1 = a + span - gap / 2, isSel = p.k === cv.sel;
+        var R = isSel ? 98 : 92;
+        var lbl = esc(p.name + ": " + money(p.total) + ", " + pctLabel(p.total / total * 100));
+        var attrs = p.k ? ' class="slice" data-k="' + esc(p.k) + '" tabindex="0" role="button"' : ' class="slice"';
+        if (span >= 359.9) s += '<circle ' + attrs + ' cx="100" cy="100" r="' + ((R + 58) / 2) + '" fill="none" stroke="' + p.color + '" stroke-width="' + (R - 58) + '" aria-label="' + lbl + '"/>';
+        else s += '<path' + attrs + ' d="' + donutPath(100, 100, R, 58, a0, Math.max(a1, a0 + 0.3)) + '" fill="' + p.color + '" aria-label="' + lbl + '"/>';
+        a += span;
+      });
+      $("pie").innerHTML = '<div class="pie"><svg class="pie-svg" viewBox="0 0 200 200" role="group" aria-label="Reparto por categoría">' + s + "</svg>" +
+        '<div class="pie-center"><span class="pc-name">' + esc(sel.name) + '</span><span class="pc-amt">' + mshort(sel.total) + ' €</span><span class="pc-pct muted">' + pctLabel(sel.total / total * 100) + " del total</span></div></div>";
+
+      $("rank").innerHTML = rows.map(function (r) {
+        var p = r.total / total * 100;
+        return '<li><button type="button" class="rrow' + (r.k === cv.sel ? " sel" : "") + '" data-k="' + esc(r.k) + '" aria-pressed="' + (r.k === cv.sel) + '">' +
+          '<i class="sw" style="background:' + colorOf(cmap, r.k) + '"></i><span class="rname"><span class="mname">' + esc(r.name) + '</span><span class="msub muted">' + r.n + (r.n === 1 ? " mov." : " movs.") + '</span></span>' +
+          '<span class="ramt num">' + mshort(r.total) + ' €</span><span class="rpct num muted">' + pctLabel(p) + "</span></button></li>";
+      }).join("");
+
+      /* detalle de la categoría elegida */
+      var catAll = all.filter(function (x) { return ckey(x.cat) === cv.sel; });
+      var catScope = scoped.filter(function (x) { return ckey(x.cat) === cv.sel; });
+      var months = monthsRange(12), vals = monthTotals(months, t, cv.sel);
+      var hb = habits(catAll).slice(0, 6);
+      var swc = colorOf(cmap, cv.sel);
+      var html = '<div class="dhead"><i class="sw" style="background:' + swc + '"></i><h2>' + esc(sel.name) + "</h2></div>" +
+        '<div class="stats"><div class="stat"><span class="eyebrow">Total</span><span class="sv num">' + mshort(sel.total) + ' €</span></div>' +
+        '<div class="stat"><span class="eyebrow">Movs.</span><span class="sv num">' + catScope.length + '</span></div>' +
+        '<div class="stat"><span class="eyebrow">Media</span><span class="sv num">' + mshort(sel.total / Math.max(catScope.length, 1)) + ' €</span></div></div>' +
+        '<h3 class="sub">' + (isG ? "Gasto" : "Ingreso") + " mes a mes</h3>" + miniBars(months, vals, swc, sel.name) +
+        '<p class="muted small dcap">Toca un mes para verlo.</p>' +
+        '<h3 class="sub">' + (isG ? "Lo que sueles gastar aquí" : "Lo que sueles recibir aquí") + "</h3>" +
+        '<ul class="habs">' + hb.map(function (g) {
+          return "<li><span class='hname'>" + esc(g.name) + "</span><span class='hsum'>" + mshort(g.total) + " €</span>" +
+            "<span class='hsub'>" + (g.more.length ? "también: " + esc(g.more.join(", ")) : "&nbsp;") + "</span>" +
+            "<span class='hmeta'>" + g.n + (g.n === 1 ? " vez" : " veces") + " · media " + mshort(g.avg) + " €</span></li>";
+        }).join("") + "</ul>";
+      $("detail").innerHTML = html;
+    }
+
+    /* barras ingresos vs gastos por mes */
+    var ms = monthsRange(12);
+    if (!ms.length) { $("bars").innerHTML = '<div class="empty">Aún no hay datos.</div>'; $("barsInfo").innerHTML = ""; $("barsTable").innerHTML = ""; return; }
+    var inc = monthTotals(ms, "ingreso"), exp = monthTotals(ms, "gasto");
+    var W = 300, H = 190, L = 32, T = 14, B = 20, pw = W - L - 4, ph = H - T - B;
+    var max = niceMax(Math.max.apply(null, ms.map(function (k) { return Math.max(inc[k], exp[k]); })));
+    var slot = pw / ms.length, bw = Math.min(10, (slot - 5) / 2), g = "";
+    [0, 0.5, 1].forEach(function (f) {
+      var y = T + ph - ph * f;
+      g += '<line class="' + (f === 0 ? "axis" : "grid") + '" x1="' + L + '" x2="' + (W - 4) + '" y1="' + y + '" y2="' + y + '"/><text class="ax" x="' + (L - 4) + '" y="' + (y + 3.5) + '" text-anchor="end">' + axisNum(max * f) + "</text>";
+    });
+    ms.forEach(function (k, i) {
+      var cx = L + slot * i + slot / 2, sel = k === state.month;
+      if (sel) g += '<rect class="hl" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '"/>';
+      var hi = inc[k] / max * ph, he = exp[k] / max * ph;
+      g += '<path class="b-pos" d="' + barPath(cx - bw - 1, T + ph - hi, bw, hi, 3) + '"/><path class="b-neg" d="' + barPath(cx + 1, T + ph - he, bw, he, 3) + '"/>';
+      g += '<text class="ax' + (sel ? " sel" : "") + '" x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + m3(k) + "</text>";
+      g += '<rect class="hit" x="' + (L + slot * i) + '" y="0" width="' + slot + '" height="' + H + '" data-m="' + k + '" tabindex="0" role="button" aria-label="' + esc(monthName(k) + ": ingresos " + money(inc[k]) + ", gastos " + money(exp[k])) + '"/>';
+    });
+    $("bars").innerHTML = '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" role="group" aria-label="Ingresos y gastos por mes">' + g + "</svg>";
+    var si = state.month in inc ? inc[state.month] : sum(state.items.filter(function (x) { return x.type === "ingreso" && x.date.slice(0, 7) === state.month; }));
+    var se = state.month in exp ? exp[state.month] : sum(state.items.filter(function (x) { return x.type === "gasto" && x.date.slice(0, 7) === state.month; }));
+    $("barsInfo").innerHTML = '<div class="binfo"><b>' + esc(cap(monthName(state.month))) + "</b><br>Ingresos <b class='num'>" + money(si) + "</b> · Gastos <b class='num'>" + money(se) + "</b> · Balance <b class='num'>" + (si - se > 0 ? "+" : "") + money(si - se) + "</b></div>";
+    $("barsTable").innerHTML = "<table><thead><tr><th>Mes</th><th class='r'>Ingresos €</th><th class='r'>Gastos €</th><th class='r'>Balance €</th></tr></thead><tbody>" +
+      ms.map(function (k) { var d = inc[k] - exp[k]; return "<tr><td style='white-space:nowrap'>" + m3(k) + " ’" + k.slice(2, 4) + "</td><td class='r num amt-pos'>" + mshort(inc[k]) + "</td><td class='r num amt-neg'>" + mshort(exp[k]) + "</td><td class='r num " + (d < 0 ? "amt-neg" : "amt-pos") + "'>" + mshort(d) + "</td></tr>"; }).join("") + "</tbody></table>";
+  }
+
+  function setView(v) {
+    view = v;
+    $("viewResumen").hidden = v !== "resumen"; $("viewGraficas").hidden = v !== "graficas";
+    $("tabResumen").setAttribute("aria-selected", v === "resumen"); $("tabGraficas").setAttribute("aria-selected", v === "graficas");
+    if (v === "graficas") renderCharts();
+    window.scrollTo(0, 0);
+  }
+  $("tabResumen").addEventListener("click", function () { setView("resumen"); });
+  $("tabGraficas").addEventListener("click", function () { setView("graficas"); });
+  $("chGasto").addEventListener("click", function () { cv.type = "gasto"; cv.sel = null; renderCharts(); });
+  $("chIngreso").addEventListener("click", function () { cv.type = "ingreso"; cv.sel = null; renderCharts(); });
+  $("chMes").addEventListener("click", function () { cv.scope = "mes"; renderCharts(); });
+  $("chTodo").addEventListener("click", function () { cv.scope = "todo"; renderCharts(); });
+  function pickCat(e) { var el = e.target.closest("[data-k]"); if (!el || !el.getAttribute("data-k")) return; cv.sel = el.getAttribute("data-k"); renderCharts(); }
+  $("pie").addEventListener("click", pickCat);
+  $("pie").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickCat(e); } });
+  $("rank").addEventListener("click", pickCat);
+  function pickMonth(e, scope) {
+    var el = e.target.closest("[data-m]"); if (!el) return;
+    state.month = el.getAttribute("data-m"); if (scope) cv.scope = "mes";
+    render();
+  }
+  $("bars").addEventListener("click", function (e) { pickMonth(e, true); });
+  $("detail").addEventListener("click", function (e) { pickMonth(e, false); });
+  ["bars", "detail"].forEach(function (id) {
+    $(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickMonth(e, id === "bars"); } });
+  });
 
   $("date").value = todayStr();
   setType("gasto");
