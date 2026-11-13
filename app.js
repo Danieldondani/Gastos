@@ -139,36 +139,11 @@
 
     renderCats();
     renderStatus();
-    renderImport();
     renderBackup();
     renderCharts();
   }
 
-  var importing = false, importDone = false;
-  function renderImport() {
-    var has = state.items.some(function (x) { return x.imported; });
-    var ready = !!store;
-    $("importBox").hidden = importing ? false : !(ready && !has && !importDone);
-  }
-  async function runImport() {
-    if (importing || !store) return;
-    importing = true;
-    var btn = $("importBtn"), txt = $("importText");
-    btn.disabled = true; btn.textContent = "Importando…";
-    try {
-      var res = await fetch("historial.json");
-      var list = await res.json();
-      await store.addMany(list);
-      importing = false; importDone = true; state.month = "2026-11";
-      $("importBox").hidden = true;
-    } catch (e) {
-      importing = false;
-      txt.textContent = "No se pudo cargar el historial. Comprueba la conexión e inténtalo de nuevo.";
-      btn.disabled = false; btn.textContent = "Reintentar";
-    }
-    render();
-  }
-  $("importBtn").addEventListener("click", runImport);
+  var importDone = true;
 
   function ckey(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
   function catLoad() {
@@ -593,7 +568,7 @@
   $("restoreCancel").addEventListener("click", function () { pendingRestore = null; $("restoreChoice").hidden = true; });
 
   /* ---------- gráficas ---------- */
-  var cv = { type: "gasto", scope: "todo", sel: null };
+  var cv = { type: "gasto", scope: "todo", sel: null, open: null, allHabs: false };
   var view = "resumen";
   var SLOTS = 7;
   var STOP = {};
@@ -693,20 +668,14 @@
 
   /* hábitos: agrupa las notas parecidas y suma lo que sueles gastar en cada cosa */
   function habits(items) {
-    var df = {};
-    var rows = items.map(function (x) {
-      var tk = tokens(x.note); tk.forEach(function (w) { df[w] = (df[w] || 0) + 1; });
-      return { x: x, tk: tk };
-    });
     var groups = {};
-    rows.forEach(function (r) {
-      var key = "";
-      r.tk.forEach(function (w) { if (!key || df[w] > df[key] || (df[w] === df[key] && w.length > key.length)) key = w; });
-      var g = groups[key] || (groups[key] = { key: key, total: 0, n: 0, last: "", names: {} });
-      var amt = Number(r.x.amount) || 0;
-      g.total += amt; g.n++;
-      if (r.x.date > g.last) g.last = r.x.date;
-      var nm = String(r.x.note || "").trim();
+    items.forEach(function (x) {
+      var key = tokens(x.note).join(" ");
+      var g = groups[key] || (groups[key] = { key: key, total: 0, n: 0, last: "", names: {}, items: [] });
+      var amt = Number(x.amount) || 0;
+      g.total += amt; g.n++; g.items.push(x);
+      if (x.date > g.last) g.last = x.date;
+      var nm = String(x.note || "").trim();
       if (nm) g.names[nm] = (g.names[nm] || 0) + 1;
     });
     return Object.keys(groups).map(function (k) {
@@ -714,6 +683,14 @@
       g.name = k ? nms[0] : "Sin nota"; g.more = k ? nms.slice(1, 3) : [];
       g.avg = g.total / g.n; return g;
     }).sort(function (a, b) { return (a.key ? 0 : 1) - (b.key ? 0 : 1) || b.total - a.total; });
+  }
+  var lastHabs = {};
+  function catOptions(t, cur) {
+    return cats[t].map(function (c) { return '<option value="' + esc(c) + '"' + (ckey(c) === ckey(cur) ? " selected" : "") + ">" + esc(c) + "</option>"; }).join("");
+  }
+  function moveItems(list, t, to) {
+    var canon = catFind(t, to); if (!canon || !list.length) return;
+    store.addMany(list.map(function (x) { return Object.assign({}, x, { cat: canon }); }));
   }
 
   function renderCharts() {
@@ -768,7 +745,7 @@
       var catAll = all.filter(function (x) { return ckey(x.cat) === cv.sel; });
       var catScope = scoped.filter(function (x) { return ckey(x.cat) === cv.sel; });
       var months = monthsRange(12), vals = monthTotals(months, t, cv.sel);
-      var hb = habits(catAll).slice(0, 6);
+      var hbAll = habits(catAll), hb = cv.allHabs ? hbAll : hbAll.slice(0, 8);
       var swc = colorOf(cmap, cv.sel);
       var html = '<div class="dhead"><i class="sw" style="background:' + swc + '"></i><h2>' + esc(sel.name) + "</h2></div>" +
         '<div class="stats"><div class="stat"><span class="eyebrow">Total</span><span class="sv num">' + mshort(sel.total) + ' €</span></div>' +
@@ -778,10 +755,23 @@
         '<p class="muted small dcap">Toca un mes para verlo.</p>' +
         '<h3 class="sub">' + (isG ? "Lo que sueles gastar aquí" : "Lo que sueles recibir aquí") + "</h3>" +
         '<ul class="habs">' + hb.map(function (g) {
-          return "<li><span class='hname'>" + esc(g.name) + "</span><span class='hsum'>" + mshort(g.total) + " €</span>" +
+          var open = cv.open === g.key;
+          lastHabs[g.key] = g;
+          var head = "<button type='button' class='hrow' data-hk='" + esc(g.key) + "' aria-expanded='" + open + "'><span class='hname'>" + esc(g.name) + "</span><span class='hsum'>" + mshort(g.total) + " €</span>" +
             "<span class='hsub'>" + (g.more.length ? "también: " + esc(g.more.join(", ")) : "&nbsp;") + "</span>" +
-            "<span class='hmeta'>" + g.n + (g.n === 1 ? " vez" : " veces") + " · media " + mshort(g.avg) + " €</span></li>";
-        }).join("") + "</ul>";
+            "<span class='hmeta'>" + g.n + (g.n === 1 ? " vez" : " veces") + " · media " + mshort(g.avg) + " € " + (open ? "▴" : "▾") + "</span></button>";
+          var panel = "";
+          if (open) {
+            var its = g.items.slice().sort(function (p, q) { return p.date < q.date ? 1 : -1; });
+            panel = "<div class='hpanel'><label class='mvall'>Mover todo a otra categoría<select data-all='" + esc(g.key) + "'><option value=''>Elegir categoría…</option>" + catOptions(t, "") + "</select></label>" +
+              "<ul class='mvs'>" + its.map(function (x) {
+                return "<li><span class='mvd'>" + fmtDate(x.date) + (x.note ? " · " + esc(x.note) : "") + "</span><span class='num mva'>" + mshort(Number(x.amount)) + " €</span>" +
+                  "<select data-id='" + esc(x.id) + "' aria-label='Categoría de este movimiento'>" + catOptions(t, x.cat) + "</select></li>";
+              }).join("") + "</ul></div>";
+          }
+          return "<li class='hab'>" + head + panel + "</li>";
+        }).join("") + "</ul>" +
+        (hbAll.length > 8 ? '<button type="button" class="ghost hmore" data-more="1">' + (cv.allHabs ? "Ver menos" : "Ver todos (" + hbAll.length + ")") + "</button>" : "");
       $("detail").innerHTML = html;
     }
 
@@ -835,7 +825,23 @@
     render();
   }
   $("bars").addEventListener("click", function (e) { pickMonth(e, true); });
-  $("detail").addEventListener("click", function (e) { pickMonth(e, false); });
+  $("detail").addEventListener("click", function (e) {
+    if (e.target.closest("[data-more]")) { cv.allHabs = !cv.allHabs; renderCharts(); return; }
+    var hr = e.target.closest(".hrow");
+    if (hr) { var k = hr.getAttribute("data-hk"); cv.open = cv.open === k ? null : k; renderCharts(); return; }
+    pickMonth(e, false);
+  });
+  $("detail").addEventListener("change", function (e) {
+    var s = e.target; if (s.tagName !== "SELECT" || !s.value) return;
+    var t = cv.type;
+    if (s.hasAttribute("data-id")) {
+      var it = state.items.filter(function (x) { return x.id === s.getAttribute("data-id"); })[0];
+      if (it) moveItems([it], t, s.value);
+    } else if (s.hasAttribute("data-all")) {
+      var g = lastHabs[s.getAttribute("data-all")];
+      if (g) { cv.open = null; moveItems(g.items, t, s.value); }
+    }
+  });
   ["bars", "detail"].forEach(function (id) {
     $(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickMonth(e, id === "bars"); } });
   });
