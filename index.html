@@ -24,14 +24,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <div class="eyebrow">Ingresos y gastos · v12</div>
-      <h1>Cuentas del mes</h1>
+    <div class="htop">
+      <div>
+        <div class="eyebrow">Ingresos y gastos · v14</div>
+        <h1>Cuentas del mes</h1>
+      </div>
+      <button class="icon-btn dots" type="button" id="sugBtn" aria-label="Sugerencias" title="Sugerencias de categoría">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1.8" fill="currentColor"/><circle cx="10" cy="10" r="1.8" fill="currentColor"/><circle cx="16" cy="10" r="1.8" fill="currentColor"/></svg>
+        <span class="badge" id="sugBadge" hidden>0</span>
+      </button>
     </div>
     <div class="month-nav">
       <button class="icon-btn" id="prev" aria-label="Mes anterior">‹</button>
@@ -53,7 +59,7 @@
   </section>
 
   <div class="cols">
-    <section class="panel" aria-labelledby="addTitle">
+    <section class="panel c-form" aria-labelledby="addTitle">
       <h2 id="addTitle">Añadir movimiento</h2>
       <form id="form" autocomplete="off">
         <div class="seg" role="group" aria-label="Tipo de movimiento">
@@ -91,7 +97,12 @@
       <div class="status" id="status"></div>
     </section>
 
-    <div class="tables">
+      <section class="panel c-mov" aria-labelledby="movTitle">
+        <h2 id="movTitle">Movimientos del mes</h2>
+        <div class="scroll" id="movTable"></div>
+      </section>
+    
+<div class="tables c-tables">
       <section class="panel" aria-labelledby="gTitle">
         <h2 id="gTitle">Gastos por categoría</h2>
         <div class="scroll" id="gTable"></div>
@@ -102,11 +113,6 @@
       </section>
     </div>
   </div>
-
-  <section class="panel" aria-labelledby="movTitle">
-    <h2 id="movTitle">Movimientos del mes</h2>
-    <div class="scroll" id="movTable"></div>
-  </section>
 
   <section class="panel" aria-labelledby="histTitle">
     <h2 id="histTitle">Meses</h2>
@@ -194,6 +200,23 @@
     </section>
   </div>
 </div>
+<div class="sheet" id="sugSheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sugTitle">
+    <div class="sheet-head">
+      <h2 id="sugTitle">Sugerencias</h2>
+      <button class="ghost" type="button" id="sugClose">Listo</button>
+    </div>
+    <p class="muted small" id="sugSummary"></p>
+    <button class="ghost" type="button" id="sugAll" hidden>Mover todas las sugeridas</button>
+    <div id="sugAllAsk" hidden>
+      <p id="sugAllText"></p>
+      <div class="actions"><button class="ghost" type="button" id="sugAllNo">Cancelar</button><button class="primary" type="button" id="sugAllYes">Sí, mover</button></div>
+    </div>
+    <div class="msg ok" id="sugMsg" role="status"></div>
+    <ul class="suglist" id="sugList"></ul>
+    <p class="muted small">Todo se calcula en tu móvil con tus propios movimientos: compara las palabras de cada nota con lo que ya tienes en cada categoría. No sale ningún dato de la app. «Dejar así» oculta esa sugerencia.</p>
+  </div>
+</div>
 <div class="sheet" id="catSheet" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="catSheetTitle">
     <div class="sheet-head">
@@ -214,6 +237,6 @@
   </div>
 </div>
 
-<script src="app.js?v=12"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

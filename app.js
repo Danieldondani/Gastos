@@ -89,6 +89,7 @@
   }
 
   function render() {
+    syncCats(); computeSuggestions();
     $("monthLabel").textContent = monthName(state.month);
     var items = monthItems();
     var gastos = items.filter(function (x) { return x.type === "gasto"; });
@@ -111,6 +112,7 @@
         movs.map(function (x) {
           var neg = x.type === "gasto";
           var subt = fmtDate(x.date) + (x.note ? " · " + esc(x.note) : "");
+          if (sugById[x.id]) subt += "<button type='button' class='sugtag' data-sug='1'>Mejor en: " + esc(sugById[x.id].to) + "</button>";
           return "<tr><td><div class='mname'>" + esc(x.cat) + "</div><div class='msub muted'>" + subt + "</div></td>" +
             "<td class='r num " + (neg ? "amt-neg" : "amt-pos") + "' style='white-space:nowrap'>" + (neg ? "−" : "+") + mshort(Number(x.amount)) + "</td>" +
             "<td class='r' style='white-space:nowrap'><button class='edit' data-id='" + esc(x.id) + "' aria-label='Editar movimiento'>✎</button>" +
@@ -141,6 +143,7 @@
     renderStatus();
     renderBackup();
     renderCharts();
+    renderSugBadge(); if (!$("sugSheet").hidden) renderSug();
   }
 
   var importDone = true;
@@ -273,6 +276,7 @@
     $("cat").value = b.getAttribute("data-cat"); $("amount").focus();
   });
   $("movTable").addEventListener("click", function (e) {
+    if (e.target.closest("button.sugtag")) { openSug(); return; }
     var eb = e.target.closest("button.edit");
     if (eb) { startEdit(eb.getAttribute("data-id")); return; }
     var b = e.target.closest("button.del"); if (!b || !store) return;
@@ -734,10 +738,12 @@
       $("pie").innerHTML = '<div class="pie"><svg class="pie-svg" viewBox="0 0 200 200" role="group" aria-label="Reparto por categoría">' + s + "</svg>" +
         '<div class="pie-center"><span class="pc-name">' + esc(sel.name) + '</span><span class="pc-amt">' + mshort(sel.total) + ' €</span><span class="pc-pct muted">' + pctLabel(sel.total / total * 100) + " del total</span></div></div>";
 
+      var sugN = {};
+      sugList.forEach(function (g) { if (g.type === t) { var a1 = ckey(g.from), a2 = ckey(g.to); sugN[a1] = (sugN[a1] || 0) + g.items.length; sugN[a2] = (sugN[a2] || 0) + g.items.length; } });
       $("rank").innerHTML = rows.map(function (r) {
         var p = r.total / total * 100;
         return '<li><button type="button" class="rrow' + (r.k === cv.sel ? " sel" : "") + '" data-k="' + esc(r.k) + '" aria-pressed="' + (r.k === cv.sel) + '">' +
-          '<i class="sw" style="background:' + colorOf(cmap, r.k) + '"></i><span class="rname"><span class="mname">' + esc(r.name) + '</span><span class="msub muted">' + r.n + (r.n === 1 ? " mov." : " movs.") + '</span></span>' +
+          '<i class="sw" style="background:' + colorOf(cmap, r.k) + '"></i><span class="rname"><span class="mname">' + esc(r.name) + '</span><span class="msub muted">' + r.n + (r.n === 1 ? " mov." : " movs.") + (sugN[r.k] ? ' · <span class="sugnote">' + sugN[r.k] + " por revisar</span>" : "") + '</span></span>' +
           '<span class="ramt num">' + mshort(r.total) + ' €</span><span class="rpct num muted">' + pctLabel(p) + "</span></button></li>";
       }).join("");
 
@@ -747,10 +753,14 @@
       var months = monthsRange(12), vals = monthTotals(months, t, cv.sel);
       var hbAll = habits(catAll), hb = cv.allHabs ? hbAll : hbAll.slice(0, 8);
       var swc = colorOf(cmap, cv.sel);
+      var mine = [];
+      sugList.forEach(function (g, gi) { if (g.type === t && (ckey(g.from) === cv.sel || ckey(g.to) === cv.sel)) mine.push(sugCardHtml(g, gi)); });
+      var sugHtml = mine.length ? '<div class="sugblock"><h3 class="sub">Sugerencias para «' + esc(sel.name) + '»</h3><p class="muted small">Según lo que tienes guardado en las demás categorías, estos movimientos encajarían mejor en otro sitio.</p><ul class="suglist">' + mine.join("") + "</ul></div>" : "";
       var html = '<div class="dhead"><i class="sw" style="background:' + swc + '"></i><h2>' + esc(sel.name) + "</h2></div>" +
         '<div class="stats"><div class="stat"><span class="eyebrow">Total</span><span class="sv num">' + mshort(sel.total) + ' €</span></div>' +
         '<div class="stat"><span class="eyebrow">Movs.</span><span class="sv num">' + catScope.length + '</span></div>' +
         '<div class="stat"><span class="eyebrow">Media</span><span class="sv num">' + mshort(sel.total / Math.max(catScope.length, 1)) + ' €</span></div></div>' +
+        sugHtml +
         '<h3 class="sub">' + (isG ? "Gasto" : "Ingreso") + " mes a mes</h3>" + miniBars(months, vals, swc, sel.name) +
         '<p class="muted small dcap">Toca un mes para verlo.</p>' +
         '<h3 class="sub">' + (isG ? "Lo que sueles gastar aquí" : "Lo que sueles recibir aquí") + "</h3>" +
@@ -826,6 +836,8 @@
   }
   $("bars").addEventListener("click", function (e) { pickMonth(e, true); });
   $("detail").addEventListener("click", function (e) {
+    var sb = e.target.closest("button[data-act]");
+    if (sb && sb.closest(".sug")) { sugAction(sb); return; }
     if (e.target.closest("[data-more]")) { cv.allHabs = !cv.allHabs; renderCharts(); return; }
     var hr = e.target.closest(".hrow");
     if (hr) { var k = hr.getAttribute("data-hk"); cv.open = cv.open === k ? null : k; renderCharts(); return; }
@@ -844,6 +856,106 @@
   });
   ["bars", "detail"].forEach(function (id) {
     $(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickMonth(e, id === "bars"); } });
+  });
+
+  /* ---------- sugerencias de categoría (aprende de tus propios movimientos, sin internet) ---------- */
+  var SUG_KEY = "cuentas-sug-ignoradas-v1";
+  var sugList = [], sugById = {};
+  function sugIgnored() { try { return JSON.parse(localStorage.getItem(SUG_KEY) || "{}") || {}; } catch (e) { return {}; } }
+  function sugIgnore(k) { var m = sugIgnored(); m[k] = 1; try { localStorage.setItem(SUG_KEY, JSON.stringify(m)); } catch (e) {} }
+
+  function computeSuggestions() {
+    var out = {}, ign = sugIgnored();
+    ["gasto", "ingreso"].forEach(function (t) {
+      var its = state.items.filter(function (x) { return x.type === t; });
+      var cnt = {}; /* palabra -> categoría -> veces */
+      its.forEach(function (x) {
+        var c = ckey(x.cat); x._tk = tokens(x.note);
+        x._tk.forEach(function (w) { var m = cnt[w] || (cnt[w] = {}); m[c] = (m[c] || 0) + 1; });
+      });
+      its.forEach(function (x) {
+        if (!x._tk.length) return;
+        var own = ckey(x.cat), votes = {}, why = {};
+        x._tk.forEach(function (w) {
+          var m = cnt[w], n = 0, mine = {};
+          Object.keys(m).forEach(function (c) { mine[c] = m[c] - (c === own ? 1 : 0); n += mine[c]; });
+          if (n < 2) return;
+          var wt = Math.log(1 + n);
+          Object.keys(mine).forEach(function (c) {
+            if (!mine[c]) return;
+            var v = mine[c] / n * wt; votes[c] = (votes[c] || 0) + v;
+            var wl = why[c] || (why[c] = []); wl.push({ w: w, k: mine[c], n: n, v: v });
+          });
+        });
+        var tot = 0, best = "", bv = 0;
+        Object.keys(votes).forEach(function (c) { tot += votes[c]; if (votes[c] > bv) { bv = votes[c]; best = c; } });
+        if (!best || best === own) return;
+        var conf = bv / tot, ownV = votes[own] || 0;
+        if (conf < 0.75 || bv - ownV < 1) return;
+        var key = t + "|" + own + "|" + best + "|" + x._tk.join(" ");
+        if (ign[key]) return;
+        var g = out[key] || (out[key] = { key: key, type: t, from: String(x.cat).trim(), to: best, items: [], total: 0, conf: 0, why: why[best], names: {} });
+        g.items.push(x); g.total += Number(x.amount) || 0; g.conf = Math.max(g.conf, conf); g.ev = Math.max(g.ev || 0, bv);
+        var nm = String(x.note || "").trim(); g.names[nm] = (g.names[nm] || 0) + 1;
+      });
+    });
+    sugList = Object.keys(out).map(function (k) {
+      var g = out[k]; g.to = catFind(g.type, g.to) || g.to;
+      g.name = Object.keys(g.names).sort(function (a, b) { return g.names[b] - g.names[a]; })[0];
+      g.why = g.why.sort(function (a, b) { return b.v - a.v; }).slice(0, 2);
+      return g;
+    }).sort(function (a, b) { return b.conf * b.items.length - a.conf * a.items.length; });
+    sugById = {};
+    sugList.forEach(function (g) { g.items.forEach(function (x) { sugById[x.id] = g; }); });
+    state.items.forEach(function (x) { delete x._tk; });
+  }
+
+  function renderSugBadge() {
+    var b = $("sugBadge"); b.textContent = sugList.length > 99 ? "99+" : String(sugList.length); b.hidden = !sugList.length;
+    $("sugBtn").setAttribute("aria-label", "Sugerencias" + (sugList.length ? ", " + sugList.length + " pendientes" : ""));
+  }
+  function sugCardHtml(g, i) {
+    var why = g.why.map(function (w) { return "«" + esc(w.w) + "» va en " + esc(g.to) + " " + w.k + " de " + w.n + " veces"; }).join("; ");
+    return '<li class="sug"><div class="sugtop"><b class="sugname">' + esc(g.name) + '</b><span class="num">' + mshort(g.total) + ' €</span></div>' +
+      '<div class="msub muted">' + (g.type === "gasto" ? "Gasto" : "Ingreso") + " · " + g.items.length + (g.items.length === 1 ? " movimiento" : " movimientos") + '</div>' +
+      '<div class="sugmove"><span class="pill">' + esc(g.from) + '</span><span aria-hidden="true">→</span><span class="pill ok">' + esc(g.to) + '</span><span class="muted small">' + (g.conf >= 0.9 && g.ev >= 3 ? "Muy probable" : "Probable") + '</span></div>' +
+      '<div class="muted small">' + why + '.</div>' +
+      '<div class="actions"><button type="button" class="ghost" data-act="no" data-i="' + i + '">Dejar así</button><button type="button" class="primary" data-act="yes" data-i="' + i + '">Mover a ' + esc(g.to) + "</button></div></li>";
+  }
+  function renderSug() {
+    var withNote = state.items.filter(function (x) { return String(x.note || "").trim(); }).length;
+    $("sugSummary").textContent = sugList.length
+      ? "He revisado " + withNote + " movimientos con nota. " + sugList.length + (sugList.length === 1 ? " parece estar" : " parecen estar") + " en otra categoría."
+      : (withNote ? "He revisado " + withNote + " movimientos con nota y todo parece estar en su sitio. Cuantos más añadas, mejor aprendo." : "Aún no hay movimientos con nota que revisar. Aprendo de las notas que escribes.");
+    $("sugAll").hidden = sugList.length < 2;
+    $("sugList").innerHTML = sugList.map(sugCardHtml).join("");
+  }
+  function applySug(list) {
+    var changed = [];
+    list.forEach(function (g) { g.items.forEach(function (x) { var o = {}; Object.keys(x).forEach(function (k) { if (k.charAt(0) !== "_") o[k] = x[k]; }); o.cat = g.to; changed.push(o); }); });
+    if (changed.length) store.addMany(changed);
+  }
+  function openSug() { $("sugSheet").hidden = false; $("sugMsg").textContent = ""; renderSug(); }
+  function closeSug() { $("sugSheet").hidden = true; try { $("sugBtn").focus(); } catch (e) {} }
+  $("sugBtn").addEventListener("click", openSug);
+  $("sugClose").addEventListener("click", closeSug);
+  $("sugSheet").addEventListener("click", function (e) { if (e.target === $("sugSheet")) closeSug(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("sugSheet").hidden) closeSug(); });
+  function sugAction(b) {
+    var g = sugList[+b.getAttribute("data-i")]; if (!g) return;
+    if (b.getAttribute("data-act") === "no") { sugIgnore(g.key); render(); return; }
+    $("sugMsg").textContent = "Movido a «" + g.to + "».";
+    applySug([g]);
+  }
+  $("sugList").addEventListener("click", function (e) { var b = e.target.closest("button[data-act]"); if (b) sugAction(b); });
+  $("sugAll").addEventListener("click", function () {
+    if ($("sugAllAsk").hidden) { $("sugAllAsk").hidden = false; $("sugAllText").textContent = "Se moverán " + sugList.reduce(function (a, g) { return a + g.items.length; }, 0) + " movimientos a la categoría sugerida. ¿Seguro?"; return; }
+  });
+  $("sugAllNo").addEventListener("click", function () { $("sugAllAsk").hidden = true; });
+  $("sugAllYes").addEventListener("click", function () {
+    var n = sugList.reduce(function (a, g) { return a + g.items.length; }, 0);
+    $("sugAllAsk").hidden = true; $("sugMsg").textContent = n + " movimientos movidos.";
+    applySug(sugList.slice());
   });
 
   $("date").value = todayStr();

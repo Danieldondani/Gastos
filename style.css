@@ -302,3 +302,25 @@ input[type="date"]::-webkit-datetime-edit { padding: 0; }
 .mvs select { grid-column: 1 / -1; }
 .hpanel select { font-family: var(--font-body); font-weight: 400; font-size: 16px !important; height: 44px; width: 100%; min-width: 0; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
 .mvall { gap: 6px; }
+
+/* ---- v13: cabecera con ⋯ y sugerencias ---- */
+.htop { flex: 1 1 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dots { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 42px; height: 42px; }
+.badge { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--neg); color: #fff; font: 600 11px/20px var(--font-body); text-align: center; }
+.suglist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sug { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.sugtop { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.sugname { overflow-wrap: anywhere; }
+.sugmove { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.pill { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.pill.ok { border-color: var(--pos); }
+.sug .actions { margin-top: 4px; }
+
+/* ---- v14: orden de bloques y sugerencias en gráficas ---- */
+.cols { grid-template-areas: "form tables" "mov mov"; }
+.c-form { grid-area: form; } .c-tables { grid-area: tables; } .c-mov { grid-area: mov; }
+@media (max-width: 760px) { .cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "form" "mov" "tables"; } }
+.sugtag { display: inline-block; margin-left: 6px; padding: 2px 8px; border: 1px solid var(--accent); border-radius: 999px; background: transparent; color: var(--accent); font-size: 12px; }
+.sugnote { color: var(--accent); }
+.sugblock { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.sugblock h3.sub { margin: 0; }
