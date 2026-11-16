@@ -321,22 +321,34 @@
   function catMsg(text, ok) { var m = $("catMsg"); m.textContent = text || ""; m.className = ok ? "msg ok" : "msg"; }
   function openCats() { syncCats(); catTab = state.type; catEdit = null; catDel = null; catOpen = null; catMsg(""); $("catSheet").hidden = false; renderCatMgr(); }
   function closeCats() { $("catSheet").hidden = true; catEdit = null; catDel = null; catOpen = null; renderCats(); try { $("catMenu").focus(); } catch (e) {} }
-  function catMovesHtml(c) {
-    var k = ckey(c), its = state.items.filter(function (x) { return x.type === catTab && ckey(x.cat) === k; })
+  var catQuery = "";
+  function renderCatDetail() {
+    var name = catFind(catTab, catOpen);
+    $("catDetail").innerHTML = "<button type='button' class='ghost cdback' data-act='back'>‹ Volver a categorías</button>" +
+      "<h3 class='cdtitle'>" + esc(name) + "</h3><p class='muted small' id='cdCount'></p>" +
+      "<input type='text' id='cdFind' placeholder='Buscar por nota' aria-label='Buscar por nota' autocomplete='off'>" +
+      "<ul class='cdlist' id='cdList'></ul><div id='cdMore'></div>";
+    $("cdFind").value = catQuery; renderCdList();
+  }
+  function renderCdList() {
+    var k = catOpen, q = nrm(catQuery);
+    var all = state.items.filter(function (x) { return x.type === catTab && ckey(x.cat) === k; })
       .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
-    if (!its.length) return "<div class='cmoves'><p class='muted small'>Esta categoría aún no tiene movimientos.</p></div>";
-    var shown = its.slice(0, catLimit);
-    return "<div class='cmoves'><p class='muted small'>" + its.length + (its.length === 1 ? " movimiento" : " movimientos") + ". Si alguno no encaja aquí, elige su categoría: la app aprende de lo que corriges.</p><ul class='mvs'>" +
-      shown.map(function (x) {
-        var sg = sugById[x.id];
-        return "<li><span class='mvd'>" + fmtDate(x.date) + (x.note ? " · " + esc(x.note) : "") +
-          (sg ? " <button type='button' class='sugtag' data-act='sugmove' data-id='" + esc(x.id) + "'>Mejor en: " + esc(sg.to) + "</button>" : "") + "</span>" +
-          "<span class='num mva'>" + mshort(Number(x.amount)) + " €</span>" +
-          "<select data-mv='" + esc(x.id) + "' aria-label='Categoría de este movimiento'>" + catOptions(catTab, x.cat) + "</select></li>";
-      }).join("") + "</ul>" +
-      (its.length > catLimit ? "<button type='button' class='ghost' data-act='more'>Ver más (" + (its.length - catLimit) + ")</button>" : "") + "</div>";
+    var its = q ? all.filter(function (x) { return nrm(x.note).indexOf(q) >= 0; }) : all;
+    $("cdCount").textContent = all.length + (all.length === 1 ? " movimiento" : " movimientos") + (q ? " · " + its.length + " coinciden" : "") + ". Si alguno no encaja aquí, cambia su categoría: la app aprende de lo que corriges.";
+    $("cdList").innerHTML = its.length ? its.slice(0, catLimit).map(function (x) {
+      var sg = sugById[x.id];
+      return "<li class='cditem'><div class='cdtop'><span class='cdnote'>" + (x.note ? esc(x.note) : "<span class='muted'>Sin nota</span>") + "</span><span class='cdamt num'>" + mshort(Number(x.amount)) + " €</span></div>" +
+        "<div class='cdmeta'><span class='muted'>" + fmtDate(x.date) + "</span>" + (sg ? "<button type='button' class='sugtag' data-act='sugmove' data-id='" + esc(x.id) + "'>Mejor en: " + esc(sg.to) + "</button>" : "") + "</div>" +
+        "<label class='cdmove'><span class='muted small'>Categoría</span><select data-mv='" + esc(x.id) + "' aria-label='Categoría de este movimiento'>" + catOptions(catTab, x.cat) + "</select></label></li>";
+    }).join("") : "<li class='muted'>No hay movimientos.</li>";
+    $("cdMore").innerHTML = its.length > catLimit ? "<button type='button' class='ghost' data-act='more'>Ver más (" + (its.length - catLimit) + ")</button>" : "";
   }
   function renderCatMgr() {
+    var inDetail = !!catOpen && !!catFind(catTab, catOpen);
+    if (!inDetail) catOpen = null;
+    $("catSeg").hidden = $("catAddForm").hidden = $("catList2").hidden = $("catHelp").hidden = inDetail; $("catDetail").hidden = !inDetail;
+    if (inDetail) { renderCatDetail(); return; }
     $("catTabGasto").setAttribute("aria-pressed", catTab === "gasto");
     $("catTabIngreso").setAttribute("aria-pressed", catTab === "ingreso");
     $("catNew").placeholder = catTab === "gasto" ? "Nueva categoría de gasto" : "Nueva categoría de ingreso";
@@ -346,16 +358,14 @@
       var k = ckey(c), n = catUsage(catTab, c), ak = esc(k), pin = isPinned(catTab, c);
       if (catEdit === k) return "<li data-k='" + ak + "'><input type='text' class='cedit' maxlength='30' value='" + esc(c) + "' aria-label='Nuevo nombre'><button type='button' class='ib ok' data-act='save' aria-label='Guardar nombre'>✓</button><button type='button' class='ib' data-act='cancel' aria-label='Cancelar'>✕</button></li>";
       if (catDel === k) return "<li class='confirm' data-k='" + ak + "'><div class='cwarn'>«" + esc(c) + "» tiene " + n + (n === 1 ? " movimiento" : " movimientos") + ". Pasarán a «" + esc(fallbackName(catTab)) + "».</div><button type='button' class='ghost' data-act='cancel'>Cancelar</button><button type='button' class='primary' data-act='delok'>Borrar</button></li>";
-      var open = catOpen === k;
-      return "<li data-k='" + ak + "'" + (open ? " class='open'" : "") + ">" +
+      return "<li data-k='" + ak + "'>" +
         "<button type='button' class='ib star" + (pin ? " on" : "") + "' data-act='pin' aria-pressed='" + pin + "' aria-label='" + (pin ? "Quitar de las categorías a mano" : "Tener esta categoría a mano") + "'>" + (pin ? "★" : "☆") + "</button>" +
         "<div class='cinfo'><div class='cname'>" + esc(c) + "</div><div class='csub muted'>" + n + " mov.</div></div>" +
         "<button type='button' class='ib' data-act='up' aria-label='Subir'" + (i === 0 ? " disabled" : "") + ">▲</button>" +
         "<button type='button' class='ib' data-act='down' aria-label='Bajar'" + (i === list.length - 1 ? " disabled" : "") + ">▼</button>" +
         "<button type='button' class='ib' data-act='edit' aria-label='Cambiar nombre'>✎</button>" +
         "<button type='button' class='ib danger' data-act='del' aria-label='Borrar categoría'>✕</button>" +
-        "<button type='button' class='ib dotsb' data-act='moves' aria-expanded='" + open + "' aria-label='Ver los movimientos de " + esc(c) + "' title='Ver movimientos'>⋯</button>" +
-        (open ? catMovesHtml(c) : "") + "</li>";
+        "<button type='button' class='ib dotsb' data-act='moves' aria-label='Ver los movimientos de " + esc(c) + "' title='Ver movimientos'>⋯</button></li>";
     }).join("");
   }
   function focusAct(k, acts) {
@@ -435,13 +445,7 @@
     var li = b.closest("li[data-k]"), k = li.getAttribute("data-k"), act = b.getAttribute("data-act"), name = catFind(catTab, k);
     if (!name) return;
     catMsg("");
-    if (act === "moves") { catOpen = catOpen === k ? null : k; catLimit = 30; renderCatMgr(); return; }
-    if (act === "more") { catLimit += 40; renderCatMgr(); return; }
-    if (act === "sugmove") {
-      var sg = sugById[b.getAttribute("data-id")];
-      if (sg) { catMsg("Movido a «" + sg.to + "».", true); moveItems(sg.items.filter(function (x) { return x.id === b.getAttribute("data-id"); }), catTab, sg.to); }
-      return;
-    }
+    if (act === "moves") { catOpen = k; catLimit = 30; catQuery = ""; renderCatMgr(); try { $("catSheet").querySelector(".sheet-card").scrollTop = 0; } catch (e2) {} return; }
     if (act === "edit") { catEdit = k; catDel = null; renderCatMgr(); var inp = $("catList2").querySelector(".cedit"); if (inp) { inp.focus(); inp.select(); } }
     else if (act === "cancel") { catEdit = null; catDel = null; renderCatMgr(); }
     else if (act === "save") renameCat(name, li.querySelector(".cedit").value);
@@ -451,7 +455,18 @@
     else if (act === "del") deleteCat(name, false);
     else if (act === "delok") deleteCat(name, true);
   });
-  $("catList2").addEventListener("change", function (e) {
+  $("catDetail").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-act]"); if (!b) return;
+    var act = b.getAttribute("data-act");
+    if (act === "back") { catOpen = null; catQuery = ""; catMsg(""); renderCatMgr(); try { $("catSheet").querySelector(".sheet-card").scrollTop = 0; } catch (e2) {} }
+    else if (act === "more") { catLimit += 40; renderCdList(); }
+    else if (act === "sugmove") {
+      var sg = sugById[b.getAttribute("data-id")];
+      if (sg) { catMsg("Movido a «" + sg.to + "».", true); moveItems(sg.items.filter(function (x) { return x.id === b.getAttribute("data-id"); }), catTab, sg.to); }
+    }
+  });
+  $("catDetail").addEventListener("input", function (e) { if (e.target.id === "cdFind") { catQuery = e.target.value; catLimit = 30; renderCdList(); } });
+  $("catDetail").addEventListener("change", function (e) {
     var s = e.target; if (s.tagName !== "SELECT" || !s.hasAttribute("data-mv") || !s.value) return;
     var id = s.getAttribute("data-mv"), it = state.items.filter(function (x) { return x.id === id; })[0];
     if (!it || ckey(it.cat) === ckey(s.value)) return;
@@ -880,6 +895,7 @@
   });
   $("detail").addEventListener("change", function (e) {
     var s = e.target; if (s.tagName !== "SELECT" || !s.value) return;
+    if (s.hasAttribute("data-sugsel")) { sugSelect(s); return; }
     var t = cv.type;
     if (s.hasAttribute("data-id")) {
       var it = state.items.filter(function (x) { return x.id === s.getAttribute("data-id"); })[0];
@@ -958,6 +974,8 @@
       '<div class="msub muted">' + (g.type === "gasto" ? "Gasto" : "Ingreso") + " · " + g.items.length + (g.items.length === 1 ? " movimiento" : " movimientos") + '</div>' +
       '<div class="sugmove"><span class="pill">' + esc(g.from) + '</span><span aria-hidden="true">→</span><span class="pill ok">' + esc(g.to) + '</span><span class="muted small">' + (g.conf >= 0.9 && g.ev >= 3 ? "Muy probable" : "Probable") + '</span></div>' +
       '<div class="muted small">' + why + '.</div>' +
+      '<label class="sugother"><span class="muted small">O elige tú la categoría</span><select data-sugsel="' + i + '"><option value="">Elegir categoría…</option>' +
+        cats[g.type].filter(function (c) { return ckey(c) !== ckey(g.from); }).map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("") + "</select></label>" +
       '<div class="actions"><button type="button" class="ghost" data-act="no" data-i="' + i + '">Dejar así</button><button type="button" class="primary" data-act="yes" data-i="' + i + '">Mover a ' + esc(g.to) + "</button></div></li>";
   }
   function renderSug() {
@@ -990,6 +1008,12 @@
     applySug([g]);
   }
   $("sugList").addEventListener("click", function (e) { var b = e.target.closest("button[data-act]"); if (b) sugAction(b); });
+  function sugSelect(s) {
+    var g = sugList[+s.getAttribute("data-sugsel")]; if (!g || !s.value) return;
+    $("sugMsg").textContent = "Movido a «" + s.value + "».";
+    moveItems(g.items, g.type, s.value);
+  }
+  $("sugList").addEventListener("change", function (e) { if (e.target.tagName === "SELECT" && e.target.hasAttribute("data-sugsel")) sugSelect(e.target); });
   $("sugAll").addEventListener("click", function () {
     if ($("sugAllAsk").hidden) { $("sugAllAsk").hidden = false; $("sugAllText").textContent = "Se moverán " + sugList.reduce(function (a, g) { return a + g.items.length; }, 0) + " movimientos a la categoría sugerida. ¿Seguro?"; return; }
   });
