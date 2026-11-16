@@ -1,6 +1,6 @@
 /* Service worker: guarda la app para que abra sin conexion. */
-const CACHE = "cuentas-v14"; /* sube el numero (v2, v3...) cada vez que cambies archivos */
-const ASSETS = ["./", "index.html", "style.css?v=14", "app.js?v=14", "manifest.json",
+const CACHE = "cuentas-v15"; /* sube el numero (v2, v3...) cada vez que cambies archivos */
+const ASSETS = ["./", "index.html", "style.css?v=15", "app.js?v=15", "manifest.json",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

@@ -324,3 +324,14 @@ input[type="date"]::-webkit-datetime-edit { padding: 0; }
 .sugnote { color: var(--accent); }
 .sugblock { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .sugblock h3.sub { margin: 0; }
+
+/* ---- v15: movimientos dentro de cada categoría ---- */
+.catlist li { flex-wrap: wrap; }
+.catlist .ib { min-width: 32px; }
+.catlist li.open { border-bottom-color: var(--accent); }
+.catlist .dotsb { font-size: 20px; line-height: 1; letter-spacing: 0; }
+.catlist li.open .dotsb { background: var(--bg); border-color: var(--accent); }
+.cmoves { flex: 1 1 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 4px 0 8px; display: flex; flex-direction: column; gap: 10px; }
+.catlist .cmoves .mvs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.catlist .cmoves .mvs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; min-height: 0; padding: 0; border: 0; }
+.cmoves select { font-family: var(--font-body); font-weight: 400; font-size: 16px !important; height: 44px; width: 100%; min-width: 0; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; grid-column: 1 / -1; }
